@@ -32,6 +32,10 @@ from customer_management.repositories.sales_users import (
     list_sales_users,
     set_sales_user_active,
 )
+from customer_management.services.dashboard import (
+    build_dashboard_snapshot,
+    list_admin_records,
+)
 from customer_management.ui.shared import render_flash, set_flash
 
 
@@ -83,12 +87,15 @@ def _render_workspace(session, admin_user):
             clear_authenticated_actor(st.session_state)
             st.rerun()
 
-    overview_tab, sales_tab, admins_tab, tags_tab, fields_tab = st.tabs(
-        ["概览", "销售人员", "管理员", "标签配置", "字段配置"]
+    overview_tab, records_tab, sales_tab, admins_tab, tags_tab, fields_tab = st.tabs(
+        ["概览", "记录总览", "销售人员", "管理员", "标签配置", "字段配置"]
     )
 
     with overview_tab:
-        st.info("管理员统计看板将在下一步补齐。")
+        _render_dashboard_overview(session)
+
+    with records_tab:
+        _render_records_overview(session)
 
     with sales_tab:
         _render_sales_management(session)
@@ -144,6 +151,114 @@ def _render_sales_management(session):
             )
             set_flash(st.session_state, f"销售人员 {name} 已创建")
             st.rerun()
+
+
+def _render_dashboard_overview(session):
+    snapshot = build_dashboard_snapshot(session)
+    metric_columns = st.columns(5)
+    metric_columns[0].metric("总记录数", snapshot.total_records)
+    metric_columns[1].metric("今日新增", snapshot.records_today)
+    metric_columns[2].metric("本周新增", snapshot.records_this_week)
+    metric_columns[3].metric("本月新增", snapshot.records_this_month)
+    metric_columns[4].metric("活跃销售", snapshot.active_sales_count)
+
+    if snapshot.trend_points:
+        trend_frame = pd.DataFrame(
+            [{"日期": item.bucket, "新增记录": item.count} for item in snapshot.trend_points]
+        ).set_index("日期")
+        st.line_chart(trend_frame)
+
+    if snapshot.sales_rankings:
+        ranking_frame = pd.DataFrame(
+            [{"销售": item.label, "提交数": item.count} for item in snapshot.sales_rankings]
+        ).set_index("销售")
+        st.bar_chart(ranking_frame)
+
+    if snapshot.tag_distributions:
+        distribution_frame = pd.DataFrame(
+            [
+                {
+                    "标签组": item.group_name,
+                    "标签": item.option_label,
+                    "数量": item.count,
+                }
+                for item in snapshot.tag_distributions
+            ]
+        )
+        st.dataframe(distribution_frame, use_container_width=True)
+
+    for key, items in snapshot.cross_statistics.items():
+        if not items:
+            continue
+        with st.expander(f"交叉统计: {key}"):
+            frame = pd.DataFrame(
+                [
+                    {"左维度": item.left_label, "右维度": item.right_label, "数量": item.count}
+                    for item in items
+                ]
+            )
+            st.dataframe(frame, use_container_width=True)
+
+
+def _render_records_overview(session):
+    st.markdown("#### 全量记录")
+    sales_users = list_sales_users(session)
+    tag_options = list_tag_options(session)
+
+    filter_columns = st.columns(3)
+    with filter_columns[0]:
+        selected_sales = st.selectbox(
+            "按销售筛选",
+            [None] + sales_users,
+            format_func=lambda item: "全部" if item is None else item.name,
+            key="admin_records_sales_filter",
+        )
+    with filter_columns[1]:
+        selected_option = st.selectbox(
+            "按标签筛选",
+            [None] + tag_options,
+            format_func=lambda item: "全部" if item is None else item.label,
+            key="admin_records_tag_filter",
+        )
+    with filter_columns[2]:
+        selected_dates = st.date_input(
+            "按日期筛选",
+            value=(),
+            key="admin_records_date_filter",
+        )
+
+    start_date = None
+    end_date = None
+    if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
+        start_date, end_date = selected_dates
+
+    records = list_admin_records(
+        session,
+        sales_user_id=None if selected_sales is None else selected_sales.id,
+        tag_option_id=None if selected_option is None else selected_option.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if not records:
+        st.info("当前筛选条件下没有记录")
+        return
+
+    frame = pd.DataFrame(
+        [
+            {
+                "ID": item["id"],
+                "销售": item["sales_name"],
+                "客户名称": item["customer_name"],
+                "联系人": item["contact_name"],
+                "电话": item["phone"],
+                "备注": item["remark"],
+                "创建时间": item["created_at"],
+                "更新时间": item["updated_at"],
+            }
+            for item in records
+        ]
+    )
+    st.dataframe(frame, use_container_width=True)
 
     if sales_users:
         selected_user = st.selectbox(
