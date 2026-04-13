@@ -24,7 +24,7 @@ copy .env.example .env
 3. Update `.env` with your real settings:
 
 ```env
-DATABASE_URL=postgresql://streamlit:streamlit@117.72.54.192:5432/customer
+DATABASE_URL=postgresql+psycopg://<db_user>:<db_password>@<db_host>:5432/customer
 APP_SECRET_KEY=replace-with-a-real-secret
 ```
 
@@ -54,6 +54,12 @@ Then insert a row into `admin_users` with:
 - `password_hash`
 - `display_name`
 - `is_active = true`
+
+Or create one through the repository layer:
+
+```bash
+python -c "from sqlalchemy import create_engine; from customer_management.db import make_session_factory; from customer_management.repositories.admin_users import create_admin_user; engine=create_engine('postgresql+psycopg://<db_user>:<db_password>@<db_host>:5432/customer'); session_factory=make_session_factory(engine); session=session_factory(); create_admin_user(session, username='admin', password='change-me', display_name='Admin'); session.close()"
+```
 
 ## Run the App
 
