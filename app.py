@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from customer_management.config import Settings
+from customer_management.ui.admin import render_admin_area
 from customer_management.ui.sales import render_sales_area
 from customer_management.ui.shared import get_session_factory
 
@@ -21,5 +22,4 @@ with sales_tab:
     render_sales_area(session_factory)
 
 with admin_tab:
-    st.subheader("管理员入口")
-    st.info("管理员工作流将在下一步实现。")
+    render_admin_area(session_factory)
