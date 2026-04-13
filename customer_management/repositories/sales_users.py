@@ -22,6 +22,19 @@ def create_sales_user(
     return sales_user
 
 
+def list_active_sales_users(session):
+    return (
+        session.query(SalesUser)
+        .filter(SalesUser.is_active.is_(True))
+        .order_by(SalesUser.name.asc())
+        .all()
+    )
+
+
+def get_sales_user_by_id(session, sales_user_id: int):
+    return session.get(SalesUser, sales_user_id)
+
+
 def authenticate_sales_user(session, name: str, password: str):
     sales_user = (
         session.query(SalesUser)

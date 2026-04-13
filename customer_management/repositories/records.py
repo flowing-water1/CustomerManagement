@@ -78,6 +78,27 @@ def update_record(
     return record
 
 
+def get_record_details(session, *, record_id: int, sales_user_id: int):
+    record = _get_owned_record(session, record_id, sales_user_id)
+    selected_option_ids = [
+        item.option_id
+        for item in session.query(RecordTag)
+        .filter(RecordTag.record_id == record.id)
+        .all()
+    ]
+    custom_field_values = {
+        item.field_id: item.value_text
+        for item in session.query(RecordFieldValue)
+        .filter(RecordFieldValue.record_id == record.id)
+        .all()
+    }
+    return {
+        "record": record,
+        "selected_option_ids": selected_option_ids,
+        "custom_field_values": custom_field_values,
+    }
+
+
 def delete_record(session, *, record_id: int, sales_user_id: int):
     record = _get_owned_record(session, record_id, sales_user_id)
     session.delete(record)
