@@ -1,2 +1,4 @@
 .ace-tool/
 .worktrees/
+.env
+__pycache__/

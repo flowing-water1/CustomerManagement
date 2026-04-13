@@ -189,6 +189,8 @@ def _render_record_actions(session, sales_user_id: int, records, schema):
 
 def _render_record_form(session, sales_user_id: int, schema):
     st.markdown("#### 新建 / 编辑记录")
+    if st.session_state.pop("sales_form_needs_reset", False):
+        _reset_record_form(schema)
     _ensure_form_defaults(schema)
 
     editing_record_id = st.session_state.get("sales_edit_record_id")
@@ -250,7 +252,7 @@ def _render_record_form(session, sales_user_id: int, schema):
                 )
                 set_flash(st.session_state, "记录已创建")
 
-            _reset_record_form(schema)
+            st.session_state["sales_form_needs_reset"] = True
             st.rerun()
 
 
