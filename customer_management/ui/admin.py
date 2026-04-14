@@ -36,6 +36,7 @@ from customer_management.services.dashboard import (
     build_dashboard_snapshot,
     list_admin_records,
 )
+from customer_management.ui.admin_customer_config import render_customer_config
 from customer_management.ui.shared import render_flash, set_flash
 
 
@@ -87,8 +88,8 @@ def _render_workspace(session, admin_user):
             clear_authenticated_actor(st.session_state)
             st.rerun()
 
-    overview_tab, records_tab, sales_tab, admins_tab, tags_tab, fields_tab = st.tabs(
-        ["概览", "记录总览", "销售人员", "管理员", "标签配置", "字段配置"]
+    overview_tab, records_tab, sales_tab, admins_tab, customer_config_tab = st.tabs(
+        ["概览", "记录总览", "销售人员", "管理员", "客户资料配置"]
     )
 
     with overview_tab:
@@ -103,11 +104,8 @@ def _render_workspace(session, admin_user):
     with admins_tab:
         _render_admin_management(session, admin_user.id)
 
-    with tags_tab:
-        _render_tag_management(session)
-
-    with fields_tab:
-        _render_field_management(session)
+    with customer_config_tab:
+        render_customer_config(session)
 
 
 def _render_sales_management(session):
