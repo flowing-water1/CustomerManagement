@@ -7,7 +7,14 @@ class Base(DeclarativeBase):
     pass
 
 
+def normalize_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql+psycopg://"):
+        return "postgresql+psycopg2://" + database_url[len("postgresql+psycopg://") :]
+    return database_url
+
+
 def make_engine(database_url: str, *, echo: bool = False):
+    database_url = normalize_database_url(database_url)
     engine_kwargs = {"echo": echo, "future": True}
     if database_url.startswith("sqlite:"):
         engine_kwargs["connect_args"] = {"check_same_thread": False}
