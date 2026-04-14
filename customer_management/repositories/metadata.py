@@ -85,6 +85,18 @@ def set_tag_group_active(session, group_id: int, is_active: bool):
     return group
 
 
+def update_tag_group(session, *, group_id: int, name: str, selection_mode: str):
+    group = session.get(TagGroup, group_id)
+    if group is None:
+        raise ValueError("Tag group not found")
+    group.name = name.strip()
+    group.selection_mode = selection_mode
+    session.add(group)
+    session.commit()
+    session.refresh(group)
+    return group
+
+
 def create_tag_option(
     session, *, group_id: int, label: str, value: Optional[str] = None
 ):
@@ -106,6 +118,17 @@ def set_tag_option_active(session, option_id: int, is_active: bool):
     if option is None:
         raise ValueError("Tag option not found")
     option.is_active = is_active
+    session.add(option)
+    session.commit()
+    session.refresh(option)
+    return option
+
+
+def update_tag_option(session, *, option_id: int, label: str):
+    option = session.get(TagOption, option_id)
+    if option is None:
+        raise ValueError("Tag option not found")
+    option.label = label.strip()
     session.add(option)
     session.commit()
     session.refresh(option)
@@ -162,6 +185,26 @@ def set_custom_field_active(session, field_id: int, is_active: bool):
     return field
 
 
+def update_custom_field(
+    session,
+    *,
+    field_id: int,
+    name: str,
+    field_type: str,
+    is_required: bool,
+):
+    field = session.get(CustomField, field_id)
+    if field is None:
+        raise ValueError("Custom field not found")
+    field.name = name.strip()
+    field.field_type = field_type
+    field.is_required = is_required
+    session.add(field)
+    session.commit()
+    session.refresh(field)
+    return field
+
+
 def create_custom_field_option(
     session, *, field_id: int, label: str, value: Optional[str] = None
 ):
@@ -189,6 +232,17 @@ def set_custom_field_option_active(session, option_id: int, is_active: bool):
     if option is None:
         raise ValueError("Custom field option not found")
     option.is_active = is_active
+    session.add(option)
+    session.commit()
+    session.refresh(option)
+    return option
+
+
+def update_custom_field_option(session, *, option_id: int, label: str):
+    option = session.get(CustomFieldOption, option_id)
+    if option is None:
+        raise ValueError("Custom field option not found")
+    option.label = label.strip()
     session.add(option)
     session.commit()
     session.refresh(option)
