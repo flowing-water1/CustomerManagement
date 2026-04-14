@@ -1,12 +1,20 @@
-from passlib.context import CryptContext
+import bcrypt
 
 
-_PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def _password_bytes(password: str) -> bytes:
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        raise ValueError("password cannot be longer than 72 bytes")
+    return password_bytes
 
 
 def hash_password(password: str) -> str:
-    return _PWD_CONTEXT.hash(password)
+    return bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return _PWD_CONTEXT.verify(password, password_hash)
+    try:
+        password_bytes = _password_bytes(password)
+    except ValueError:
+        return False
+    return bcrypt.checkpw(password_bytes, password_hash.encode("utf-8"))
