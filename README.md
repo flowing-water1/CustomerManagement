@@ -67,6 +67,14 @@ python -c "from sqlalchemy import create_engine; from customer_management.db imp
 streamlit run app.py
 ```
 
+## Admin Metadata Workflow
+
+Admin customer metadata now lives under `客户资料配置`.
+
+- The page begins with a `当前配置情况` summary card.
+- Active and inactive classification items remain visible there.
+- Changes made in that area flow through to the sales record form.
+
 ## Run Tests
 
 ```bash
