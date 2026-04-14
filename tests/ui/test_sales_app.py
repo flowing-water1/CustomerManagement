@@ -4,6 +4,7 @@ from streamlit.testing.v1 import AppTest
 
 from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.db import make_engine, make_session_factory
+from customer_management.repositories.metadata import create_custom_field
 from customer_management.repositories.sales_users import create_sales_user
 
 
@@ -51,3 +52,42 @@ def test_sales_user_can_log_in_create_record_and_see_it_in_list(tmp_path, monkey
     app.run()
 
     assert "ACME" in app.dataframe[0].value.to_string()
+
+
+def test_sales_page_renders_number_custom_field_without_state_errors(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "sales-number-field.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_sales_user(
+            session,
+            name="Alice",
+            password="next-pass",
+            must_change_password=False,
+        )
+        create_custom_field(
+            session,
+            name="测试",
+            field_type="number",
+            is_required=False,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+
+    app.selectbox(key="sales_user_name").select("Alice")
+    app.text_input(key="sales_password").input("next-pass")
+    next(button for button in app.button if button.label == "销售登录").click()
+    app.run()
+
+    assert len(app.exception) == 0
+    assert any(widget.key == "custom_field_custom_field" for widget in app.number_input)

@@ -1,3 +1,4 @@
+from datetime import date
 import pandas as pd
 import streamlit as st
 
@@ -216,9 +217,25 @@ def _render_record_form(session, sales_user_id: int, schema):
             if field.field_type == "textarea":
                 st.text_area(field.name, key=field_key)
             elif field.field_type == "number":
-                st.number_input(field.name, key=field_key, value=0.0)
+                if field_key in st.session_state:
+                    st.number_input(field.name, key=field_key, placeholder="请输入数字")
+                else:
+                    st.number_input(
+                        field.name,
+                        key=field_key,
+                        value=None,
+                        placeholder="请输入数字",
+                    )
             elif field.field_type == "date":
-                st.date_input(field.name, key=field_key)
+                if field_key in st.session_state:
+                    st.date_input(field.name, key=field_key, format="YYYY/MM/DD")
+                else:
+                    st.date_input(
+                        field.name,
+                        key=field_key,
+                        value=None,
+                        format="YYYY/MM/DD",
+                    )
             elif field.field_type == "select":
                 labels = [""] + [option.label for option in field.options]
                 st.selectbox(field.name, labels, key=field_key)
@@ -325,6 +342,18 @@ def _load_record_form(schema, details):
                 value,
             )
             st.session_state[key] = display_value
+        elif field.field_type == "number":
+            parsed_value = _parse_number_value(value)
+            if parsed_value is None:
+                st.session_state.pop(key, None)
+            else:
+                st.session_state[key] = parsed_value
+        elif field.field_type == "date":
+            parsed_value = _parse_date_value(value)
+            if parsed_value is None:
+                st.session_state.pop(key, None)
+            else:
+                st.session_state[key] = parsed_value
         else:
             st.session_state[key] = value
 
@@ -342,7 +371,9 @@ def _ensure_form_defaults(schema):
         else:
             st.session_state.setdefault(key, [])
     for field in schema.custom_fields:
-        st.session_state.setdefault(f"custom_field_{field.code}", "")
+        field_key = f"custom_field_{field.code}"
+        if field.field_type in {"text", "textarea", "select"}:
+            st.session_state.setdefault(field_key, "")
 
 
 def _reset_record_form(schema):
@@ -358,4 +389,28 @@ def _reset_record_form(schema):
         else:
             st.session_state[f"tag_group_{group.code}"] = []
     for field in schema.custom_fields:
-        st.session_state[f"custom_field_{field.code}"] = ""
+        field_key = f"custom_field_{field.code}"
+        if field.field_type in {"text", "textarea", "select"}:
+            st.session_state[field_key] = ""
+        else:
+            st.session_state.pop(field_key, None)
+
+
+def _parse_number_value(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_date_value(value):
+    if value in (None, ""):
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
