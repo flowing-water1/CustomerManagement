@@ -105,6 +105,26 @@ def test_customer_config_summary_shows_inactive_tag_and_opens_tag_quick_edit(
     )
 
 
+def test_customer_config_quick_tag_add_does_not_raise_session_state_error(
+    tmp_path, monkeypatch
+):
+    app = _build_logged_in_admin_app(tmp_path, monkeypatch)
+
+    app.button(key="admin_summary_focus_tag_customer_level").click()
+    app.run()
+
+    app.text_input(key="admin_quick_tag_option_label_customer_level").input("VIP")
+    next(
+        button
+        for button in app.button
+        if button.key == "FormSubmitter:admin_quick_tag_form_customer_level-新增选项"
+    ).click()
+    app.run()
+
+    assert len(app.exception) == 0
+    assert any("VIP" in widget.value for widget in app.markdown)
+
+
 def test_customer_config_field_section_shows_examples_and_opens_field_quick_edit(
     tmp_path, monkeypatch
 ):

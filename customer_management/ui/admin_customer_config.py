@@ -221,7 +221,7 @@ def _render_field_section(session, snapshot):
 
 def _render_tag_quick_edit(session, row):
     st.markdown(f"为 **{row.name}** 快速新增或启停选项")
-    with st.form(f"admin_quick_tag_form_{row.code}"):
+    with st.form(f"admin_quick_tag_form_{row.code}", clear_on_submit=True):
         st.text_input(
             "新增选项名称",
             key=f"admin_quick_tag_option_label_{row.code}",
@@ -233,7 +233,6 @@ def _render_tag_quick_edit(session, row):
                 st.error("标签选项名称不能为空")
                 return
             create_tag_option(session, group_id=row.id, label=label)
-            st.session_state[f"admin_quick_tag_option_label_{row.code}"] = ""
             st.rerun()
 
     group_options = list_tag_options(session, group_id=row.id)
