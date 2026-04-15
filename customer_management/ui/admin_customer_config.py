@@ -1,10 +1,18 @@
 import streamlit as st
 
 from customer_management.repositories.metadata import (
+    can_delete_custom_field,
+    can_delete_custom_field_option,
+    can_delete_tag_group,
+    can_delete_tag_option,
     create_custom_field,
     create_custom_field_option,
     create_tag_group,
     create_tag_option,
+    delete_custom_field,
+    delete_custom_field_option,
+    delete_tag_group,
+    delete_tag_option,
     list_custom_field_options,
     list_custom_fields,
     list_tag_groups,
@@ -28,9 +36,12 @@ def render_customer_config(session):
     st.markdown(
         "这里展示销售当前会用到的客户分类和补充资料。你在这里修改后，销售录入页会同步变化。"
     )
+    st.divider()
 
     _render_summary_card(session, snapshot)
+    st.divider()
     _render_tag_section(session)
+    st.divider()
     _render_field_section(session, snapshot)
 
 
@@ -48,6 +59,7 @@ def _render_summary_card(session, snapshot):
                 _set_focus("tag", row.code)
                 st.rerun()
         if _is_focused("tag", row.code):
+            st.divider()
             _render_tag_quick_edit(session, row)
 
     if snapshot.field_rows:
@@ -64,6 +76,7 @@ def _render_summary_card(session, snapshot):
                     _set_focus("field", row.code)
                     st.rerun()
             if _is_focused("field", row.code):
+                st.divider()
                 _render_field_quick_edit(session, row)
 
 
@@ -97,10 +110,22 @@ def _render_tag_section(session):
             format_func=lambda item: f"{item.name} ({'启用' if item.is_active else '停用'})",
             key="admin_customer_config_toggle_tag_group",
         )
+        toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用分类" if selected_group.is_active else "启用分类"
-        if st.button(button_label, key="admin_customer_config_toggle_tag_group_button"):
-            set_tag_group_active(session, selected_group.id, not selected_group.is_active)
-            st.rerun()
+        with toggle_column:
+            if st.button(
+                button_label,
+                key="admin_customer_config_toggle_tag_group_button",
+            ):
+                set_tag_group_active(session, selected_group.id, not selected_group.is_active)
+                st.rerun()
+        with delete_column:
+            if can_delete_tag_group(session, selected_group.id) and st.button(
+                "删除分类",
+                key="admin_delete_tag_group_button",
+            ):
+                delete_tag_group(session, selected_group.id)
+                st.rerun()
 
     if tag_groups:
         with st.form("admin_customer_config_create_tag_option_form"):
@@ -126,10 +151,22 @@ def _render_tag_section(session):
             format_func=lambda item: f"{item.label} ({'启用' if item.is_active else '停用'})",
             key="admin_customer_config_toggle_tag_option",
         )
+        toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用标签选项" if selected_option.is_active else "启用标签选项"
-        if st.button(button_label, key="admin_customer_config_toggle_tag_option_button"):
-            set_tag_option_active(session, selected_option.id, not selected_option.is_active)
-            st.rerun()
+        with toggle_column:
+            if st.button(
+                button_label,
+                key="admin_customer_config_toggle_tag_option_button",
+            ):
+                set_tag_option_active(session, selected_option.id, not selected_option.is_active)
+                st.rerun()
+        with delete_column:
+            if can_delete_tag_option(session, selected_option.id) and st.button(
+                "删除标签选项",
+                key="admin_delete_tag_option_button",
+            ):
+                delete_tag_option(session, selected_option.id)
+                st.rerun()
 
 
 def _render_field_section(session, snapshot):
@@ -178,10 +215,22 @@ def _render_field_section(session, snapshot):
             format_func=lambda item: f"{item.name} ({'启用' if item.is_active else '停用'})",
             key="admin_customer_config_toggle_field",
         )
+        toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用字段" if selected_field.is_active else "启用字段"
-        if st.button(button_label, key="admin_customer_config_toggle_field_button"):
-            set_custom_field_active(session, selected_field.id, not selected_field.is_active)
-            st.rerun()
+        with toggle_column:
+            if st.button(
+                button_label,
+                key="admin_customer_config_toggle_field_button",
+            ):
+                set_custom_field_active(session, selected_field.id, not selected_field.is_active)
+                st.rerun()
+        with delete_column:
+            if can_delete_custom_field(session, selected_field.id) and st.button(
+                "删除字段",
+                key="admin_delete_custom_field_button",
+            ):
+                delete_custom_field(session, selected_field.id)
+                st.rerun()
 
     select_fields = [field for field in custom_fields if field.field_type == "select"]
     if select_fields:
@@ -208,15 +257,24 @@ def _render_field_section(session, snapshot):
             format_func=lambda item: f"{item.label} ({'启用' if item.is_active else '停用'})",
             key="admin_customer_config_toggle_field_option",
         )
+        toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用字段选项" if selected_option.is_active else "启用字段选项"
-        if st.button(
-            button_label,
-            key="admin_customer_config_toggle_field_option_button",
-        ):
-            set_custom_field_option_active(
-                session, selected_option.id, not selected_option.is_active
-            )
-            st.rerun()
+        with toggle_column:
+            if st.button(
+                button_label,
+                key="admin_customer_config_toggle_field_option_button",
+            ):
+                set_custom_field_option_active(
+                    session, selected_option.id, not selected_option.is_active
+                )
+                st.rerun()
+        with delete_column:
+            if can_delete_custom_field_option(session, selected_option.id) and st.button(
+                "删除字段选项",
+                key="admin_delete_custom_field_option_button",
+            ):
+                delete_custom_field_option(session, selected_option.id)
+                st.rerun()
 
 
 def _render_tag_quick_edit(session, row):

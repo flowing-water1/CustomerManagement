@@ -4,10 +4,11 @@ from streamlit.testing.v1 import AppTest
 
 from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.db import make_engine, make_session_factory
-from customer_management.models import TagOption
+from customer_management.models import RecordFieldValue, RecordTag, TagOption
 from customer_management.repositories.admin_users import create_admin_user
 from customer_management.repositories.metadata import (
     create_custom_field,
+    create_custom_field_option,
     set_tag_option_active,
 )
 
@@ -168,4 +169,118 @@ def test_customer_config_field_section_shows_examples_and_opens_field_quick_edit
     assert any(
         widget.key == "admin_quick_field_name_custom_field"
         for widget in app.text_input
+    )
+
+
+def test_customer_config_shows_delete_buttons_for_unused_metadata(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "admin-unused-delete.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+        field = create_custom_field(
+            session,
+            name="采购周期",
+            field_type="select",
+            is_required=False,
+        )
+        create_custom_field_option(
+            session,
+            field_id=field.id,
+            label="月结",
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    assert any(button.key == "admin_delete_tag_group_button" for button in app.button)
+    assert any(button.key == "admin_delete_tag_option_button" for button in app.button)
+    assert any(button.key == "admin_delete_custom_field_button" for button in app.button)
+    assert any(
+        button.key == "admin_delete_custom_field_option_button"
+        for button in app.button
+    )
+
+
+def test_customer_config_hides_delete_buttons_for_used_metadata(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "admin-used-delete.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+        field = create_custom_field(
+            session,
+            name="采购周期",
+            field_type="select",
+            is_required=False,
+        )
+        used_field_option = create_custom_field_option(
+            session,
+            field_id=field.id,
+            label="月结",
+        )
+        used_tag_option = (
+            session.query(TagOption)
+            .filter(TagOption.value == "general")
+            .one()
+        )
+        session.add(
+            RecordTag(
+                record_id=1,
+                group_id=used_tag_option.group_id,
+                option_id=used_tag_option.id,
+            )
+        )
+        session.add(
+            RecordFieldValue(
+                record_id=1,
+                field_id=field.id,
+                value_text=used_field_option.value,
+            )
+        )
+        session.commit()
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    assert not any(button.key == "admin_delete_tag_group_button" for button in app.button)
+    assert not any(button.key == "admin_delete_tag_option_button" for button in app.button)
+    assert not any(button.key == "admin_delete_custom_field_button" for button in app.button)
+    assert not any(
+        button.key == "admin_delete_custom_field_option_button"
+        for button in app.button
     )
