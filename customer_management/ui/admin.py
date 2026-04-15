@@ -39,6 +39,9 @@ from customer_management.services.dashboard import (
 from customer_management.ui.admin_customer_config import render_customer_config
 from customer_management.ui.shared import render_flash, set_flash
 
+ADMIN_PAGE_KEY = "admin_workspace_page"
+ADMIN_PAGES = ["概览", "记录总览", "销售人员", "管理员", "客户资料配置"]
+
 
 def render_admin_area(session_factory):
     st.subheader("管理员入口")
@@ -88,23 +91,24 @@ def _render_workspace(session, admin_user):
             clear_authenticated_actor(st.session_state)
             st.rerun()
 
-    overview_tab, records_tab, sales_tab, admins_tab, customer_config_tab = st.tabs(
-        ["概览", "记录总览", "销售人员", "管理员", "客户资料配置"]
+    default_index = ADMIN_PAGES.index(st.session_state.get(ADMIN_PAGE_KEY, "客户资料配置"))
+    selected_page = st.radio(
+        "管理员工作台",
+        ADMIN_PAGES,
+        index=default_index,
+        key=ADMIN_PAGE_KEY,
+        horizontal=True,
     )
 
-    with overview_tab:
+    if selected_page == "概览":
         _render_dashboard_overview(session)
-
-    with records_tab:
+    elif selected_page == "记录总览":
         _render_records_overview(session)
-
-    with sales_tab:
+    elif selected_page == "销售人员":
         _render_sales_management(session)
-
-    with admins_tab:
+    elif selected_page == "管理员":
         _render_admin_management(session, admin_user.id)
-
-    with customer_config_tab:
+    else:
         render_customer_config(session)
 
 
