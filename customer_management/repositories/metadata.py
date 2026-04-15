@@ -4,6 +4,8 @@ from typing import Optional
 from customer_management.models import (
     CustomField,
     CustomFieldOption,
+    RecordFieldValue,
+    RecordTag,
     TagGroup,
     TagOption,
 )
@@ -97,6 +99,25 @@ def update_tag_group(session, *, group_id: int, name: str, selection_mode: str):
     return group
 
 
+def can_delete_tag_group(session, group_id: int) -> bool:
+    return (
+        session.query(RecordTag)
+        .filter(RecordTag.group_id == group_id)
+        .count()
+        == 0
+    )
+
+
+def delete_tag_group(session, group_id: int):
+    group = session.get(TagGroup, group_id)
+    if group is None:
+        raise ValueError("Tag group not found")
+    if not can_delete_tag_group(session, group_id):
+        raise ValueError("Tag group has been used")
+    session.delete(group)
+    session.commit()
+
+
 def create_tag_option(
     session, *, group_id: int, label: str, value: Optional[str] = None
 ):
@@ -133,6 +154,25 @@ def update_tag_option(session, *, option_id: int, label: str):
     session.commit()
     session.refresh(option)
     return option
+
+
+def can_delete_tag_option(session, option_id: int) -> bool:
+    return (
+        session.query(RecordTag)
+        .filter(RecordTag.option_id == option_id)
+        .count()
+        == 0
+    )
+
+
+def delete_tag_option(session, option_id: int):
+    option = session.get(TagOption, option_id)
+    if option is None:
+        raise ValueError("Tag option not found")
+    if not can_delete_tag_option(session, option_id):
+        raise ValueError("Tag option has been used")
+    session.delete(option)
+    session.commit()
 
 
 def list_custom_fields(session):
@@ -205,6 +245,25 @@ def update_custom_field(
     return field
 
 
+def can_delete_custom_field(session, field_id: int) -> bool:
+    return (
+        session.query(RecordFieldValue)
+        .filter(RecordFieldValue.field_id == field_id)
+        .count()
+        == 0
+    )
+
+
+def delete_custom_field(session, field_id: int):
+    field = session.get(CustomField, field_id)
+    if field is None:
+        raise ValueError("Custom field not found")
+    if not can_delete_custom_field(session, field_id):
+        raise ValueError("Custom field has been used")
+    session.delete(field)
+    session.commit()
+
+
 def create_custom_field_option(
     session, *, field_id: int, label: str, value: Optional[str] = None
 ):
@@ -247,6 +306,31 @@ def update_custom_field_option(session, *, option_id: int, label: str):
     session.commit()
     session.refresh(option)
     return option
+
+
+def can_delete_custom_field_option(session, option_id: int) -> bool:
+    option = session.get(CustomFieldOption, option_id)
+    if option is None:
+        raise ValueError("Custom field option not found")
+    return (
+        session.query(RecordFieldValue)
+        .filter(
+            RecordFieldValue.field_id == option.field_id,
+            RecordFieldValue.value_text == option.value,
+        )
+        .count()
+        == 0
+    )
+
+
+def delete_custom_field_option(session, option_id: int):
+    option = session.get(CustomFieldOption, option_id)
+    if option is None:
+        raise ValueError("Custom field option not found")
+    if not can_delete_custom_field_option(session, option_id):
+        raise ValueError("Custom field option has been used")
+    session.delete(option)
+    session.commit()
 
 
 def _make_unique_text(session, model, field_name: str, raw_value: str, prefix: str):
