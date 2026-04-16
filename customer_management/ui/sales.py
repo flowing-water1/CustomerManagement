@@ -151,7 +151,7 @@ def _render_record_actions(session, sales_user_id: int, records, schema):
     )
     selected_record_id = record_options[selected_label]
 
-    action_left, action_right = st.columns(2)
+    action_left, action_middle, action_right = st.columns(3)
     with action_left:
         if st.button("加载编辑", key="sales_load_record"):
             details = get_record_details(
@@ -162,9 +162,13 @@ def _render_record_actions(session, sales_user_id: int, records, schema):
             _load_record_form(schema, details)
             st.rerun()
 
-    with action_right:
+    with action_middle:
         if st.button("删除所选记录", key="sales_request_delete"):
             st.session_state["sales_pending_delete_id"] = selected_record_id
+            st.rerun()
+    with action_right:
+        if st.button("新建记录", key="sales_start_new_record"):
+            _reset_record_form(schema)
             st.rerun()
 
     pending_delete_id = st.session_state.get("sales_pending_delete_id")
@@ -189,12 +193,12 @@ def _render_record_actions(session, sales_user_id: int, records, schema):
 
 
 def _render_record_form(session, sales_user_id: int, schema):
-    st.markdown("#### 新建 / 编辑记录")
     if st.session_state.pop("sales_form_needs_reset", False):
         _reset_record_form(schema)
     _ensure_form_defaults(schema)
 
     editing_record_id = st.session_state.get("sales_edit_record_id")
+    st.markdown("#### 新建 / 编辑记录")
     if editing_record_id:
         st.caption(f"当前正在编辑记录 #{editing_record_id}")
 
