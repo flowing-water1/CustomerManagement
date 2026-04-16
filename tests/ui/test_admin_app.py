@@ -219,6 +219,37 @@ def test_customer_config_shows_delete_buttons_for_unused_metadata(
     )
 
 
+def test_customer_config_can_delete_tag_options_consecutively(
+    tmp_path, monkeypatch
+):
+    app = _build_logged_in_admin_app(tmp_path, monkeypatch)
+
+    selector = app.selectbox(key="admin_customer_config_toggle_tag_option")
+    assert len(selector.options) > 2
+
+    selector.select_index(1)
+    app.run()
+    deleted_label = app.selectbox(
+        key="admin_customer_config_toggle_tag_option"
+    ).options[1]
+
+    app.button(key="admin_delete_tag_option_button").click()
+    app.run()
+
+    selector = app.selectbox(key="admin_customer_config_toggle_tag_option")
+    assert len(app.exception) == 0
+    assert deleted_label not in selector.options
+    assert selector.index == 1
+
+    next_deleted_label = selector.options[1]
+    app.button(key="admin_delete_tag_option_button").click()
+    app.run()
+
+    selector = app.selectbox(key="admin_customer_config_toggle_tag_option")
+    assert len(app.exception) == 0
+    assert next_deleted_label not in selector.options
+
+
 def test_customer_config_hides_delete_buttons_for_used_metadata(
     tmp_path, monkeypatch
 ):

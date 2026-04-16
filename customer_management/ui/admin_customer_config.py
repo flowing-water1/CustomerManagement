@@ -32,6 +32,10 @@ from customer_management.services.admin_metadata import (
 
 FOCUS_KIND_KEY = "admin_customer_config_focus_kind"
 FOCUS_CODE_KEY = "admin_customer_config_focus_code"
+TAG_GROUP_SELECT_KEY = "admin_customer_config_toggle_tag_group"
+TAG_OPTION_SELECT_KEY = "admin_customer_config_toggle_tag_option"
+CUSTOM_FIELD_SELECT_KEY = "admin_customer_config_toggle_field"
+FIELD_OPTION_SELECT_KEY = "admin_customer_config_toggle_field_option"
 
 
 def render_customer_config(session):
@@ -126,34 +130,37 @@ def _render_tag_section(session):
             tag_options = list_tag_options(session)
 
     if tag_groups:
-        selected_group = st.selectbox(
+        selected_group = _select_item_by_id(
             "选择分类进行启停",
             tag_groups,
             format_func=lambda item: f"{item.name} ({'启用' if item.is_active else '停用'})",
-            key="admin_customer_config_toggle_tag_group",
+            key=TAG_GROUP_SELECT_KEY,
         )
         toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用分类" if selected_group.is_active else "启用分类"
         with toggle_column:
-            if st.button(
+            st.button(
                 button_label,
                 key="admin_customer_config_toggle_tag_group_button",
-            ):
-                set_tag_group_active(session, selected_group.id, not selected_group.is_active)
-                tag_groups = list_tag_groups(session)
-                tag_options = list_tag_options(session)
+                on_click=_toggle_tag_group,
+                args=(session, selected_group.id, selected_group.is_active),
+            )
         with delete_column:
-            if can_delete_tag_group(session, selected_group.id) and st.button(
-                "删除分类",
-                key="admin_delete_tag_group_button",
-            ):
-                delete_tag_group(session, selected_group.id)
-                tag_groups = list_tag_groups(session)
-                tag_options = list_tag_options(session)
+            if can_delete_tag_group(session, selected_group.id):
+                st.button(
+                    "删除分类",
+                    key="admin_delete_tag_group_button",
+                    on_click=_delete_tag_group_and_select_next,
+                    args=(
+                        session,
+                        selected_group.id,
+                        _item_ids(tag_groups),
+                    ),
+                )
 
     if tag_groups:
         with st.form("admin_customer_config_create_tag_option_form"):
-            selected_group = st.selectbox(
+            selected_group = _select_item_by_id(
                 "选择分类新增选项",
                 tag_groups,
                 format_func=lambda item: item.name,
@@ -170,28 +177,33 @@ def _render_tag_section(session):
                 tag_options = list_tag_options(session)
 
     if tag_options:
-        selected_option = st.selectbox(
+        selected_option = _select_item_by_id(
             "选择标签选项进行启停",
             tag_options,
             format_func=lambda item: f"{item.label} ({'启用' if item.is_active else '停用'})",
-            key="admin_customer_config_toggle_tag_option",
+            key=TAG_OPTION_SELECT_KEY,
         )
         toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用标签选项" if selected_option.is_active else "启用标签选项"
         with toggle_column:
-            if st.button(
+            st.button(
                 button_label,
                 key="admin_customer_config_toggle_tag_option_button",
-            ):
-                set_tag_option_active(session, selected_option.id, not selected_option.is_active)
-                tag_options = list_tag_options(session)
+                on_click=_toggle_tag_option,
+                args=(session, selected_option.id, selected_option.is_active),
+            )
         with delete_column:
-            if can_delete_tag_option(session, selected_option.id) and st.button(
-                "删除标签选项",
-                key="admin_delete_tag_option_button",
-            ):
-                delete_tag_option(session, selected_option.id)
-                tag_options = list_tag_options(session)
+            if can_delete_tag_option(session, selected_option.id):
+                st.button(
+                    "删除标签选项",
+                    key="admin_delete_tag_option_button",
+                    on_click=_delete_tag_option_and_select_next,
+                    args=(
+                        session,
+                        selected_option.id,
+                        _item_ids(tag_options),
+                    ),
+                )
 
 
 def _render_field_section(session, field_helper_examples):
@@ -235,35 +247,38 @@ def _render_field_section(session, field_helper_examples):
             field_options = list_custom_field_options(session)
 
     if custom_fields:
-        selected_field = st.selectbox(
+        selected_field = _select_item_by_id(
             "选择字段进行启停",
             custom_fields,
             format_func=lambda item: f"{item.name} ({'启用' if item.is_active else '停用'})",
-            key="admin_customer_config_toggle_field",
+            key=CUSTOM_FIELD_SELECT_KEY,
         )
         toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用字段" if selected_field.is_active else "启用字段"
         with toggle_column:
-            if st.button(
+            st.button(
                 button_label,
                 key="admin_customer_config_toggle_field_button",
-            ):
-                set_custom_field_active(session, selected_field.id, not selected_field.is_active)
-                custom_fields = list_custom_fields(session)
-                field_options = list_custom_field_options(session)
+                on_click=_toggle_custom_field,
+                args=(session, selected_field.id, selected_field.is_active),
+            )
         with delete_column:
-            if can_delete_custom_field(session, selected_field.id) and st.button(
-                "删除字段",
-                key="admin_delete_custom_field_button",
-            ):
-                delete_custom_field(session, selected_field.id)
-                custom_fields = list_custom_fields(session)
-                field_options = list_custom_field_options(session)
+            if can_delete_custom_field(session, selected_field.id):
+                st.button(
+                    "删除字段",
+                    key="admin_delete_custom_field_button",
+                    on_click=_delete_custom_field_and_select_next,
+                    args=(
+                        session,
+                        selected_field.id,
+                        _item_ids(custom_fields),
+                    ),
+                )
 
     select_fields = [field for field in custom_fields if field.field_type == "select"]
     if select_fields:
         with st.form("admin_customer_config_create_field_option_form"):
-            selected_field = st.selectbox(
+            selected_field = _select_item_by_id(
                 "选择字段新增选项",
                 select_fields,
                 format_func=lambda item: item.name,
@@ -279,30 +294,33 @@ def _render_field_section(session, field_helper_examples):
                 field_options = list_custom_field_options(session)
 
     if field_options:
-        selected_option = st.selectbox(
+        selected_option = _select_item_by_id(
             "选择字段选项进行启停",
             field_options,
             format_func=lambda item: f"{item.label} ({'启用' if item.is_active else '停用'})",
-            key="admin_customer_config_toggle_field_option",
+            key=FIELD_OPTION_SELECT_KEY,
         )
         toggle_column, delete_column = st.columns([1, 1])
         button_label = "停用字段选项" if selected_option.is_active else "启用字段选项"
         with toggle_column:
-            if st.button(
+            st.button(
                 button_label,
                 key="admin_customer_config_toggle_field_option_button",
-            ):
-                set_custom_field_option_active(
-                    session, selected_option.id, not selected_option.is_active
-                )
-                field_options = list_custom_field_options(session)
+                on_click=_toggle_custom_field_option,
+                args=(session, selected_option.id, selected_option.is_active),
+            )
         with delete_column:
-            if can_delete_custom_field_option(session, selected_option.id) and st.button(
-                "删除字段选项",
-                key="admin_delete_custom_field_option_button",
-            ):
-                delete_custom_field_option(session, selected_option.id)
-                field_options = list_custom_field_options(session)
+            if can_delete_custom_field_option(session, selected_option.id):
+                st.button(
+                    "删除字段选项",
+                    key="admin_delete_custom_field_option_button",
+                    on_click=_delete_custom_field_option_and_select_next,
+                    args=(
+                        session,
+                        selected_option.id,
+                        _item_ids(field_options),
+                    ),
+                )
 
 
 def _render_tag_quick_edit(session, row):
@@ -380,6 +398,106 @@ def _format_items(items):
             label = f"{label}（已停用）"
         formatted_items.append(label)
     return formatted_items
+
+
+def _select_item_by_id(label, items, *, key, format_func):
+    items_by_id = {item.id: item for item in items}
+    item_ids = list(items_by_id)
+    labels_by_id = {
+        item_id: format_func(item)
+        for item_id, item in items_by_id.items()
+    }
+    ids_by_label = {item_label: item_id for item_id, item_label in labels_by_id.items()}
+    _ensure_valid_selection(key, item_ids, ids_by_label)
+    selected_id = st.selectbox(
+        label,
+        item_ids,
+        format_func=lambda item_id: _display_selectbox_value(item_id, labels_by_id),
+        key=key,
+    )
+    if isinstance(selected_id, str):
+        selected_id = ids_by_label[selected_id]
+    return items_by_id[selected_id]
+
+
+def _ensure_valid_selection(
+    key: str, valid_ids: list[int], ids_by_label: dict[str, int]
+):
+    if not valid_ids:
+        st.session_state.pop(key, None)
+        return
+    current_value = st.session_state.get(key)
+    if current_value in ids_by_label:
+        st.session_state[key] = ids_by_label[current_value]
+        return
+    if not isinstance(current_value, int):
+        st.session_state[key] = valid_ids[0]
+        return
+    if current_value not in valid_ids:
+        st.session_state[key] = valid_ids[0]
+
+
+def _item_ids(items) -> list[int]:
+    return [item.id for item in items]
+
+
+def _display_selectbox_value(value, labels_by_id: dict[int, str]):
+    if value in labels_by_id:
+        return labels_by_id[value]
+    return value
+
+
+def _select_next_after_deleted_item(key: str, current_ids: list[int], deleted_id: int):
+    remaining_ids = [item_id for item_id in current_ids if item_id != deleted_id]
+    if not remaining_ids:
+        st.session_state.pop(key, None)
+        return
+    deleted_index = current_ids.index(deleted_id)
+    st.session_state[key] = remaining_ids[min(deleted_index, len(remaining_ids) - 1)]
+
+
+def _toggle_tag_group(session, group_id: int, is_active: bool):
+    set_tag_group_active(session, group_id, not is_active)
+
+
+def _delete_tag_group_and_select_next(
+    session, group_id: int, current_ids: list[int]
+):
+    delete_tag_group(session, group_id)
+    _select_next_after_deleted_item(TAG_GROUP_SELECT_KEY, current_ids, group_id)
+
+
+def _toggle_tag_option(session, option_id: int, is_active: bool):
+    set_tag_option_active(session, option_id, not is_active)
+
+
+def _delete_tag_option_and_select_next(
+    session, option_id: int, current_ids: list[int]
+):
+    delete_tag_option(session, option_id)
+    _select_next_after_deleted_item(TAG_OPTION_SELECT_KEY, current_ids, option_id)
+
+
+def _toggle_custom_field(session, field_id: int, is_active: bool):
+    set_custom_field_active(session, field_id, not is_active)
+
+
+def _delete_custom_field_and_select_next(
+    session, field_id: int, current_ids: list[int]
+):
+    delete_custom_field(session, field_id)
+    _select_next_after_deleted_item(CUSTOM_FIELD_SELECT_KEY, current_ids, field_id)
+
+
+def _toggle_custom_field_option(session, option_id: int, is_active: bool):
+    set_custom_field_option_active(session, option_id, not is_active)
+
+
+def _delete_custom_field_option_and_select_next(
+    session, option_id: int, current_ids: list[int]
+):
+    delete_custom_field_option(session, option_id)
+    _select_next_after_deleted_item(FIELD_OPTION_SELECT_KEY, current_ids, option_id)
 
 
 def _set_focus(kind: str, code: str):
