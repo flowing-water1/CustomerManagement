@@ -34,9 +34,8 @@ class TagDistributionItem:
 
 
 @dataclass
-class CrossStatItem:
-    left_label: str
-    right_label: str
+class DistributionItem:
+    label: str
     count: int
 
 
@@ -50,7 +49,8 @@ class DashboardSnapshot:
     trend_points: list = field(default_factory=list)
     sales_rankings: list = field(default_factory=list)
     tag_distributions: list = field(default_factory=list)
-    cross_statistics: dict = field(default_factory=dict)
+    customer_level_distribution: list = field(default_factory=list)
+    customer_type_distribution: list = field(default_factory=list)
 
 
 def build_dashboard_snapshot(session) -> DashboardSnapshot:
@@ -113,6 +113,8 @@ def build_dashboard_snapshot(session) -> DashboardSnapshot:
         )
         for group_code, group_name, option_label, count in distribution_rows
     ]
+    customer_level_distribution = _build_distribution(session, "customer_level")
+    customer_type_distribution = _build_distribution(session, "customer_type")
 
     return DashboardSnapshot(
         total_records=total_records,
@@ -123,17 +125,8 @@ def build_dashboard_snapshot(session) -> DashboardSnapshot:
         trend_points=trend_points,
         sales_rankings=sales_rankings,
         tag_distributions=tag_distributions,
-        cross_statistics={
-            "sales_x_customer_type": _build_cross_stat(
-                session, "customer_type", left_dimension="sales"
-            ),
-            "brand_x_customer_type": _build_cross_stat(
-                session, "customer_type", left_dimension="brand"
-            ),
-            "customer_level_x_customer_type": _build_cross_stat(
-                session, "customer_type", left_dimension="customer_level"
-            ),
-        },
+        customer_level_distribution=customer_level_distribution,
+        customer_type_distribution=customer_type_distribution,
     )
 
 
@@ -175,65 +168,14 @@ def list_admin_records(
     ]
 
 
-def _build_cross_stat(session, right_group_code: str, *, left_dimension: str):
-    right_group = (
-        session.query(TagGroup).filter(TagGroup.code == right_group_code).one_or_none()
-    )
-    if right_group is None:
-        return []
-
-    right_alias = session.query(TagOption.id, TagOption.label).filter(
-        TagOption.group_id == right_group.id
-    )
-    right_options = {row.id: row.label for row in right_alias.all()}
-
-    if left_dimension == "sales":
-        rows = (
-            session.query(SalesUser.name, RecordTag.option_id, func.count(CustomerRecord.id))
-            .join(CustomerRecord, CustomerRecord.sales_user_id == SalesUser.id)
-            .join(RecordTag, RecordTag.record_id == CustomerRecord.id)
-            .join(TagOption, TagOption.id == RecordTag.option_id)
-            .filter(TagOption.group_id == right_group.id)
-            .group_by(SalesUser.name, RecordTag.option_id)
-            .all()
-        )
-        return [
-            CrossStatItem(left_label=left, right_label=right_options[right], count=count)
-            for left, right, count in rows
-        ]
-
-    left_group = session.query(TagGroup).filter(TagGroup.code == left_dimension).one_or_none()
-    if left_group is None:
-        return []
-
-    left_options = {
-        row.id: row.label
-        for row in session.query(TagOption.id, TagOption.label)
-        .filter(TagOption.group_id == left_group.id)
-        .all()
-    }
-
-    left_tags = RecordTag.__table__.alias("left_tags")
-    right_tags = RecordTag.__table__.alias("right_tags")
-
+def _build_distribution(session, group_code: str):
     rows = (
-        session.query(
-            left_tags.c.option_id,
-            right_tags.c.option_id,
-            func.count(CustomerRecord.id),
-        )
-        .join(CustomerRecord, CustomerRecord.id == left_tags.c.record_id)
-        .join(right_tags, right_tags.c.record_id == CustomerRecord.id)
-        .filter(left_tags.c.group_id == left_group.id)
-        .filter(right_tags.c.group_id == right_group.id)
-        .group_by(left_tags.c.option_id, right_tags.c.option_id)
+        session.query(TagOption.label, func.count(RecordTag.id))
+        .join(TagGroup, TagGroup.id == TagOption.group_id)
+        .join(RecordTag, RecordTag.option_id == TagOption.id)
+        .filter(TagGroup.code == group_code)
+        .group_by(TagOption.label)
+        .order_by(func.count(RecordTag.id).desc(), TagOption.label.asc())
         .all()
     )
-    return [
-        CrossStatItem(
-            left_label=left_options[left_option_id],
-            right_label=right_options[right_option_id],
-            count=count,
-        )
-        for left_option_id, right_option_id, count in rows
-    ]
+    return [DistributionItem(label=label, count=count) for label, count in rows]

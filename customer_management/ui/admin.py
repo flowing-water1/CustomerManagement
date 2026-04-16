@@ -1,3 +1,4 @@
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -164,19 +165,42 @@ def _render_dashboard_overview(session):
     metric_columns[3].metric("本月新增", snapshot.records_this_month)
     metric_columns[4].metric("活跃销售", snapshot.active_sales_count)
 
-    if snapshot.trend_points:
-        trend_frame = pd.DataFrame(
-            [{"日期": item.bucket, "新增记录": item.count} for item in snapshot.trend_points]
-        ).set_index("日期")
-        st.line_chart(trend_frame)
+    top_left, top_right = st.columns(2)
+    with top_left:
+        st.markdown("#### 新增客户记录趋势")
+        if snapshot.trend_points:
+            trend_frame = pd.DataFrame(
+                [{"日期": item.bucket, "新增记录": item.count} for item in snapshot.trend_points]
+            ).set_index("日期")
+            st.line_chart(trend_frame)
+        else:
+            st.info("暂无趋势数据")
+    with top_right:
+        st.markdown("#### 各销售提交客户数")
+        if snapshot.sales_rankings:
+            ranking_frame = pd.DataFrame(
+                [{"销售": item.label, "提交数": item.count} for item in snapshot.sales_rankings]
+            ).set_index("销售")
+            st.bar_chart(ranking_frame)
+        else:
+            st.info("暂无销售提交数据")
 
-    if snapshot.sales_rankings:
-        ranking_frame = pd.DataFrame(
-            [{"销售": item.label, "提交数": item.count} for item in snapshot.sales_rankings]
-        ).set_index("销售")
-        st.bar_chart(ranking_frame)
+    bottom_left, bottom_right = st.columns(2)
+    with bottom_left:
+        _render_donut_chart(
+            "客户等级分布",
+            snapshot.customer_level_distribution,
+            "暂无客户等级数据",
+        )
+    with bottom_right:
+        _render_donut_chart(
+            "已成交 / 未成交占比",
+            snapshot.customer_type_distribution,
+            "暂无成交状态数据",
+        )
 
     if snapshot.tag_distributions:
+        st.markdown("#### 各标签使用情况")
         distribution_frame = pd.DataFrame(
             [
                 {
@@ -189,17 +213,27 @@ def _render_dashboard_overview(session):
         )
         st.dataframe(distribution_frame, use_container_width=True)
 
-    for key, items in snapshot.cross_statistics.items():
-        if not items:
-            continue
-        with st.expander(f"交叉统计: {key}"):
-            frame = pd.DataFrame(
-                [
-                    {"左维度": item.left_label, "右维度": item.right_label, "数量": item.count}
-                    for item in items
-                ]
-            )
-            st.dataframe(frame, use_container_width=True)
+
+def _render_donut_chart(title: str, items, empty_message: str):
+    st.markdown(f"#### {title}")
+    if not items:
+        st.info(empty_message)
+        return
+
+    frame = pd.DataFrame(
+        [{"标签": item.label, "数量": item.count} for item in items]
+    )
+    chart = (
+        alt.Chart(frame)
+        .mark_arc(innerRadius=70)
+        .encode(
+            theta=alt.Theta(field="数量", type="quantitative"),
+            color=alt.Color(field="标签", type="nominal", legend=alt.Legend(title=None)),
+            tooltip=["标签", "数量"],
+        )
+        .properties(height=280)
+    )
+    st.altair_chart(chart, use_container_width=True)
 
 
 def _render_records_overview(session):
