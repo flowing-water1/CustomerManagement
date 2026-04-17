@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, text
 
 from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.models import TagGroup, TagOption
@@ -48,3 +48,30 @@ def test_seed_default_metadata_inserts_confirmed_tag_options(db_session):
         "greatwall",
         "kunlun",
     } <= options
+
+
+def test_create_schema_adds_is_test_user_column_to_existing_sales_users_table():
+    engine = create_engine("sqlite:///:memory:")
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE sales_users (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    password_hash VARCHAR(255) NOT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    must_change_password BOOLEAN NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+
+    create_schema(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("sales_users")}
+
+    assert "is_test_user" in columns

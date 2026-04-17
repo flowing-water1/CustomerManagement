@@ -37,6 +37,7 @@ python scripts/init_db.py
 ```
 
 This creates the tables and seeds the default tag groups/options from the confirmed business requirements.
+If the database already exists, startup also backfills the `sales_users.is_test_user` column automatically.
 
 ## Create the First Admin User
 
@@ -66,6 +67,10 @@ python -c "from sqlalchemy import create_engine; from customer_management.db imp
 ```bash
 streamlit run app.py
 ```
+
+Sales users always see production data only.
+Admins can switch between `生产数据` and `测试数据` inside the admin workspace.
+Admins also have a `测试入口` page that opens the sales workspace with a test account, without exposing test accounts in the normal sales login.
 
 ## Admin Metadata Workflow
 

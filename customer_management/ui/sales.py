@@ -23,6 +23,8 @@ from customer_management.repositories.sales_users import (
 from customer_management.services.forms import build_record_form_schema
 from customer_management.ui.shared import render_flash, set_flash
 
+SALES_PASSWORD_FORM_VISIBLE_KEY = "sales_password_form_visible"
+
 
 def render_sales_area(session_factory):
     st.subheader("销售入口")
@@ -32,21 +34,28 @@ def render_sales_area(session_factory):
         actor = get_authenticated_actor(st.session_state)
         if actor and actor["actor_type"] == "sales":
             sales_user = get_sales_user_by_id(session, actor["actor_id"])
-            if sales_user is None or not sales_user.is_active:
+            if sales_user is None or not sales_user.is_active or sales_user.is_test_user:
                 clear_authenticated_actor(st.session_state)
                 set_flash(st.session_state, "当前销售账号不可用", level="error")
                 st.rerun()
             if sales_user.must_change_password:
                 _render_change_password(session, sales_user)
                 return
-            _render_workspace(session, sales_user)
+            render_sales_workspace(
+                session,
+                sales_user,
+                header_text=f"当前销售: {sales_user.name}",
+                exit_button_label="退出登录",
+                on_exit=lambda: _handle_sales_workspace_exit(session),
+                allow_password_change=True,
+            )
             return
 
         _render_login(session)
 
 
 def _render_login(session):
-    sales_users = list_active_sales_users(session)
+    sales_users = list_active_sales_users(session, is_test_user=False)
     names = [user.name for user in sales_users] or [""]
 
     with st.form("sales_login_form"):
@@ -59,7 +68,12 @@ def _render_login(session):
                 st.error("当前还没有可登录的销售账号")
                 return
 
-            authenticated = authenticate_sales_user(session, selected_name, password)
+            authenticated = authenticate_sales_user(
+                session,
+                selected_name,
+                password,
+                is_test_user=False,
+            )
             if authenticated is None:
                 st.error("销售姓名或密码错误")
                 return
@@ -97,17 +111,34 @@ def _render_change_password(session, sales_user):
             st.rerun()
 
 
-def _render_workspace(session, sales_user):
+def render_sales_workspace(
+    session,
+    sales_user,
+    *,
+    header_text: str,
+    exit_button_label: str,
+    on_exit,
+    allow_password_change: bool,
+):
     schema = build_record_form_schema(session)
 
-    header_left, header_right = st.columns([3, 1])
+    header_left, password_column, logout_column = st.columns([3, 1, 1])
     with header_left:
-        st.caption(f"当前销售: {sales_user.name}")
-    with header_right:
-        if st.button("退出登录", key="sales_logout"):
-            clear_authenticated_actor(st.session_state)
-            _reset_record_form(schema)
+        st.caption(header_text)
+    with password_column:
+        if allow_password_change:
+            st.button(
+                "修改密码",
+                key="sales_open_password_form",
+                on_click=_show_sales_password_form,
+            )
+    with logout_column:
+        if st.button(exit_button_label, key="sales_logout"):
+            on_exit()
             st.rerun()
+
+    if allow_password_change:
+        _render_self_service_password_form(session, sales_user)
 
     query = st.text_input("搜索客户", key="sales_record_query")
     records = list_records_for_sales_user(session, sales_user.id, query=query)
@@ -277,6 +308,58 @@ def _render_record_form(session, sales_user_id: int, schema):
             st.rerun()
 
 
+def _render_self_service_password_form(session, sales_user):
+    if not st.session_state.get(SALES_PASSWORD_FORM_VISIBLE_KEY):
+        return
+
+    with st.form("sales_self_change_password_form"):
+        old_password = st.text_input("当前密码", type="password", key="sales_self_old_password")
+        new_password = st.text_input("新密码", type="password", key="sales_self_new_password")
+        confirm_password = st.text_input("确认新密码", type="password", key="sales_self_confirm_password")
+        save_column, cancel_column = st.columns(2)
+        with save_column:
+            save_clicked = st.form_submit_button("保存新密码")
+        with cancel_column:
+            cancel_clicked = st.form_submit_button("取消")
+
+        if cancel_clicked:
+            _clear_sales_password_form_fields()
+            _hide_sales_password_form()
+            st.rerun()
+
+        if save_clicked:
+            if not new_password or new_password != confirm_password:
+                st.error("新密码为空或两次输入不一致")
+                return
+            try:
+                change_sales_password(
+                    session,
+                    sales_user.id,
+                    old_password,
+                    new_password,
+                )
+            except ValueError:
+                st.error("当前密码不正确")
+                return
+            _clear_sales_password_form_fields()
+            _hide_sales_password_form()
+            set_flash(st.session_state, "密码已更新，下次登录请使用新密码")
+            st.rerun()
+
+
+def reset_sales_workspace_state(session):
+    schema = build_record_form_schema(session)
+    _hide_sales_password_form()
+    _clear_sales_password_form_fields()
+    _reset_record_form(schema)
+    st.session_state.pop("sales_record_query", None)
+    st.session_state.pop("sales_selected_record_label", None)
+    st.session_state.pop("sales_form_needs_reset", None)
+    st.session_state.pop("sales_old_password", None)
+    st.session_state.pop("sales_new_password", None)
+    st.session_state.pop("sales_confirm_password", None)
+
+
 def _collect_form_payload(schema):
     selected_option_ids = []
     for group in schema.tag_groups:
@@ -387,6 +470,7 @@ def _reset_record_form(schema):
     st.session_state["phone"] = ""
     st.session_state["remark"] = ""
     st.session_state.pop("sales_pending_delete_id", None)
+    st.session_state.pop("sales_selected_record_label", None)
     for group in schema.tag_groups:
         if group.selection_mode == "single":
             st.session_state[f"tag_group_{group.code}"] = ""
@@ -418,3 +502,22 @@ def _parse_date_value(value):
         return date.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _show_sales_password_form():
+    st.session_state[SALES_PASSWORD_FORM_VISIBLE_KEY] = True
+
+
+def _hide_sales_password_form():
+    st.session_state[SALES_PASSWORD_FORM_VISIBLE_KEY] = False
+
+
+def _clear_sales_password_form_fields():
+    st.session_state.pop("sales_self_old_password", None)
+    st.session_state.pop("sales_self_new_password", None)
+    st.session_state.pop("sales_self_confirm_password", None)
+
+
+def _handle_sales_workspace_exit(session):
+    clear_authenticated_actor(st.session_state)
+    reset_sales_workspace_state(session)

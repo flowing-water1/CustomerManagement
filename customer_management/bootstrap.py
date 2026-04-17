@@ -1,3 +1,5 @@
+from sqlalchemy import inspect, text
+
 from customer_management.db import Base
 from customer_management import models  # noqa: F401
 from customer_management.models import TagGroup, TagOption
@@ -71,6 +73,7 @@ DEFAULT_TAG_GROUPS = [
 
 def create_schema(engine) -> None:
     Base.metadata.create_all(engine)
+    _ensure_sales_user_test_column(engine)
 
 
 def seed_default_metadata(session) -> None:
@@ -112,3 +115,23 @@ def seed_default_metadata(session) -> None:
                 )
 
     session.commit()
+
+
+def _ensure_sales_user_test_column(engine) -> None:
+    inspector = inspect(engine)
+    if "sales_users" not in inspector.get_table_names():
+        return
+
+    existing_columns = {
+        column["name"] for column in inspector.get_columns("sales_users")
+    }
+    if "is_test_user" in existing_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE sales_users "
+                "ADD COLUMN is_test_user BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        )

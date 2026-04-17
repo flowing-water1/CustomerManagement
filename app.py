@@ -6,7 +6,6 @@ from customer_management.ui.admin import render_admin_area
 from customer_management.ui.sales import render_sales_area
 from customer_management.ui.shared import get_session_factory
 
-
 load_dotenv()
 
 st.set_page_config(page_title="客户信息管理", layout="wide")

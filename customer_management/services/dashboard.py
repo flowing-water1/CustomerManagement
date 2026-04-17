@@ -53,34 +53,40 @@ class DashboardSnapshot:
     customer_type_distribution: list = field(default_factory=list)
 
 
-def build_dashboard_snapshot(session) -> DashboardSnapshot:
+def _build_dashboard_snapshot(session, *, is_test_user: Optional[bool]) -> DashboardSnapshot:
     now = datetime.utcnow()
     today_start = datetime(now.year, now.month, now.day)
     week_start = today_start - timedelta(days=today_start.weekday())
     month_start = datetime(now.year, now.month, 1)
 
-    total_records = session.query(CustomerRecord).count()
+    record_query = _build_record_query(session, is_test_user=is_test_user)
+
+    total_records = record_query.count()
     records_today = (
-        session.query(CustomerRecord)
+        _build_record_query(session, is_test_user=is_test_user)
         .filter(CustomerRecord.created_at >= today_start)
         .count()
     )
     records_this_week = (
-        session.query(CustomerRecord)
+        _build_record_query(session, is_test_user=is_test_user)
         .filter(CustomerRecord.created_at >= week_start)
         .count()
     )
     records_this_month = (
-        session.query(CustomerRecord)
+        _build_record_query(session, is_test_user=is_test_user)
         .filter(CustomerRecord.created_at >= month_start)
         .count()
     )
     active_sales_count = (
-        session.query(func.count(func.distinct(CustomerRecord.sales_user_id))).scalar() or 0
+        _build_record_query(session, is_test_user=is_test_user)
+        .with_entities(func.count(func.distinct(CustomerRecord.sales_user_id)))
+        .scalar()
+        or 0
     )
 
     trend_rows = (
-        session.query(func.date(CustomerRecord.created_at), func.count(CustomerRecord.id))
+        _build_record_query(session, is_test_user=is_test_user)
+        .with_entities(func.date(CustomerRecord.created_at), func.count(CustomerRecord.id))
         .group_by(func.date(CustomerRecord.created_at))
         .order_by(func.date(CustomerRecord.created_at))
         .all()
@@ -90,6 +96,7 @@ def build_dashboard_snapshot(session) -> DashboardSnapshot:
     ranking_rows = (
         session.query(SalesUser.name, func.count(CustomerRecord.id))
         .join(CustomerRecord, CustomerRecord.sales_user_id == SalesUser.id)
+        .filter(*_build_test_user_filters(is_test_user=is_test_user))
         .group_by(SalesUser.name)
         .order_by(func.count(CustomerRecord.id).desc(), SalesUser.name.asc())
         .all()
@@ -100,6 +107,9 @@ def build_dashboard_snapshot(session) -> DashboardSnapshot:
         session.query(TagGroup.code, TagGroup.name, TagOption.label, func.count(RecordTag.id))
         .join(TagOption, TagOption.group_id == TagGroup.id)
         .join(RecordTag, RecordTag.option_id == TagOption.id)
+        .join(CustomerRecord, CustomerRecord.id == RecordTag.record_id)
+        .join(SalesUser, SalesUser.id == CustomerRecord.sales_user_id)
+        .filter(*_build_test_user_filters(is_test_user=is_test_user))
         .group_by(TagGroup.code, TagGroup.name, TagOption.label)
         .order_by(TagGroup.code.asc(), func.count(RecordTag.id).desc())
         .all()
@@ -113,8 +123,16 @@ def build_dashboard_snapshot(session) -> DashboardSnapshot:
         )
         for group_code, group_name, option_label, count in distribution_rows
     ]
-    customer_level_distribution = _build_distribution(session, "customer_level")
-    customer_type_distribution = _build_distribution(session, "customer_type")
+    customer_level_distribution = _build_distribution(
+        session,
+        "customer_level",
+        is_test_user=is_test_user,
+    )
+    customer_type_distribution = _build_distribution(
+        session,
+        "customer_type",
+        is_test_user=is_test_user,
+    )
 
     return DashboardSnapshot(
         total_records=total_records,
@@ -137,10 +155,12 @@ def list_admin_records(
     tag_option_id: Optional[int] = None,
     start_date=None,
     end_date=None,
+    is_test_user: Optional[bool] = None,
 ):
     query = (
         session.query(CustomerRecord, SalesUser.name)
         .join(SalesUser, SalesUser.id == CustomerRecord.sales_user_id)
+        .filter(*_build_test_user_filters(is_test_user=is_test_user))
         .order_by(CustomerRecord.updated_at.desc())
     )
     if sales_user_id is not None:
@@ -168,14 +188,38 @@ def list_admin_records(
     ]
 
 
-def _build_distribution(session, group_code: str):
+def _build_distribution(session, group_code: str, *, is_test_user: Optional[bool]):
     rows = (
         session.query(TagOption.label, func.count(RecordTag.id))
         .join(TagGroup, TagGroup.id == TagOption.group_id)
         .join(RecordTag, RecordTag.option_id == TagOption.id)
+        .join(CustomerRecord, CustomerRecord.id == RecordTag.record_id)
+        .join(SalesUser, SalesUser.id == CustomerRecord.sales_user_id)
         .filter(TagGroup.code == group_code)
+        .filter(*_build_test_user_filters(is_test_user=is_test_user))
         .group_by(TagOption.label)
         .order_by(func.count(RecordTag.id).desc(), TagOption.label.asc())
         .all()
     )
     return [DistributionItem(label=label, count=count) for label, count in rows]
+
+
+def build_dashboard_snapshot(
+    session, *, is_test_user: Optional[bool] = None
+) -> DashboardSnapshot:
+    return _build_dashboard_snapshot(session, is_test_user=is_test_user)
+
+
+def _build_record_query(session, *, is_test_user: Optional[bool]):
+    query = session.query(CustomerRecord)
+    if is_test_user is None:
+        return query
+    return query.join(SalesUser, SalesUser.id == CustomerRecord.sales_user_id).filter(
+        SalesUser.is_test_user.is_(is_test_user)
+    )
+
+
+def _build_test_user_filters(*, is_test_user: Optional[bool]):
+    if is_test_user is None:
+        return ()
+    return (SalesUser.is_test_user.is_(is_test_user),)

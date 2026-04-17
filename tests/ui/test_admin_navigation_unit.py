@@ -18,7 +18,7 @@ def test_admin_workspace_only_renders_selected_page(monkeypatch):
     monkeypatch.setattr(
         admin_ui.st,
         "columns",
-        lambda spec: (_DummyContext(), _DummyContext()),
+        lambda spec: tuple(_DummyContext() for _ in range(spec if isinstance(spec, int) else len(spec))),
     )
     monkeypatch.setattr(admin_ui.st, "button", lambda *args, **kwargs: False)
     monkeypatch.setattr(

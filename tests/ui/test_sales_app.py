@@ -6,7 +6,10 @@ from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.db import make_engine, make_session_factory
 from customer_management.repositories.records import create_record
 from customer_management.repositories.metadata import create_custom_field
-from customer_management.repositories.sales_users import create_sales_user
+from customer_management.repositories.sales_users import (
+    authenticate_sales_user,
+    create_sales_user,
+)
 
 
 def test_sales_login_page_shows_name_selector(monkeypatch):
@@ -145,3 +148,80 @@ def test_sales_user_can_start_new_record_from_record_actions(tmp_path, monkeypat
     assert app.text_input(key="customer_name").value == ""
     assert app.text_input(key="contact_name").value == ""
     assert app.text_input(key="phone").value == ""
+
+
+def test_sales_user_can_change_password_from_workspace(tmp_path, monkeypatch):
+    database_path = tmp_path / "sales-change-password.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_sales_user(
+            session,
+            name="Alice",
+            password="next-pass",
+            must_change_password=False,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+
+    app.selectbox(key="sales_user_name").select("Alice")
+    app.text_input(key="sales_password").input("next-pass")
+    next(button for button in app.button if button.label == "销售登录").click()
+    app.run()
+
+    assert any(button.label == "修改密码" for button in app.button)
+
+    next(button for button in app.button if button.label == "修改密码").click()
+    app.run()
+
+    app.text_input(key="sales_self_old_password").input("next-pass")
+    app.text_input(key="sales_self_new_password").input("updated-pass")
+    app.text_input(key="sales_self_confirm_password").input("updated-pass")
+    next(button for button in app.button if button.label == "保存新密码").click()
+    app.run()
+
+    assert len(app.exception) == 0
+    assert any(button.label == "退出登录" for button in app.button)
+
+    with session_factory() as session:
+        assert authenticate_sales_user(session, "Alice", "updated-pass") is not None
+
+
+def test_sales_login_hides_test_users_by_default(tmp_path, monkeypatch):
+    database_path = tmp_path / "sales-default-production-filter.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_sales_user(
+            session,
+            name="Alice",
+            password="alice-pass",
+            must_change_password=False,
+        )
+        create_sales_user(
+            session,
+            name="Tester",
+            password="tester-pass",
+            must_change_password=False,
+            is_test_user=True,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+
+    assert app.selectbox(key="sales_user_name").options == ["Alice"]
+    assert not any(widget.key == "app_environment_mode" for widget in app.radio)

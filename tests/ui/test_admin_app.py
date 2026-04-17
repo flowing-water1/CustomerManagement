@@ -4,7 +4,7 @@ from streamlit.testing.v1 import AppTest
 
 from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.db import make_engine, make_session_factory
-from customer_management.models import RecordFieldValue, RecordTag, TagOption
+from customer_management.models import CustomerRecord, RecordFieldValue, RecordTag, TagOption
 from customer_management.repositories.admin_users import (
     authenticate_admin_user,
     create_admin_user,
@@ -15,6 +15,7 @@ from customer_management.repositories.metadata import (
     create_custom_field_option,
     set_tag_option_active,
 )
+from customer_management.repositories.sales_users import create_sales_user, get_sales_user_by_id
 
 
 def test_admin_login_page_shows_username_and_password(monkeypatch):
@@ -374,8 +375,8 @@ def test_admin_management_can_delete_other_admin_user(tmp_path, monkeypatch):
         seed_default_metadata(session)
         create_admin_user(
             session,
-            username="hr-admin",
-            display_name="HR",
+            username="admin",
+            display_name="Admin",
             password="admin-pass",
         )
         removable_admin = create_admin_user(
@@ -390,7 +391,7 @@ def test_admin_management_can_delete_other_admin_user(tmp_path, monkeypatch):
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
-    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_username").input("admin")
     app.text_input(key="admin_password").input("admin-pass")
     next(button for button in app.button if button.label == "管理员登录").click()
     app.run()
@@ -410,7 +411,7 @@ def test_admin_management_can_delete_other_admin_user(tmp_path, monkeypatch):
         assert authenticate_admin_user(session, "ops-admin", "ops-pass") is None
 
 
-def test_admin_management_hides_delete_for_core_admin(tmp_path, monkeypatch):
+def test_core_admin_can_access_admin_management_page(tmp_path, monkeypatch):
     database_path = tmp_path / "admin-protected-user.db"
     database_url = f"sqlite:///{database_path.as_posix()}"
     engine = make_engine(database_url)
@@ -442,13 +443,214 @@ def test_admin_management_hides_delete_for_core_admin(tmp_path, monkeypatch):
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
-    app.text_input(key="admin_username").input("hr-admin")
-    app.text_input(key="admin_password").input("admin-pass")
+    app.text_input(key="admin_username").input("admin")
+    app.text_input(key="admin_password").input("core-pass")
     next(button for button in app.button if button.label == "管理员登录").click()
     app.run()
 
     app.radio(key="admin_workspace_page").set_value("管理员")
     app.run()
 
-    assert not any(button.key == "admin_delete_admin_user_button" for button in app.button)
-    assert not any(button.key == "admin_toggle_admin_user_button" for button in app.button)
+    assert any(button.key == "admin_delete_admin_user_button" for button in app.button)
+    assert any(button.key == "admin_toggle_admin_user_button" for button in app.button)
+
+
+def test_admin_can_mark_sales_user_as_test_user(tmp_path, monkeypatch):
+    database_path = tmp_path / "admin-mark-test-sales-user.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="admin",
+            display_name="Admin",
+            password="admin-pass",
+        )
+        sales_user = create_sales_user(
+            session,
+            name="Alice",
+            password="sales-pass",
+            must_change_password=False,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    app.radio(key="admin_workspace_page").set_value("销售人员")
+    app.run()
+
+    assert any(button.key == "admin_toggle_test_sales_user_button" for button in app.button)
+
+    app.button(key="admin_toggle_test_sales_user_button").click()
+    app.run()
+
+    with session_factory() as session:
+        assert get_sales_user_by_id(session, sales_user.id).is_test_user is True
+
+
+def test_admin_sales_management_can_switch_between_production_and_test_data(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "admin-production-sales-filter.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="admin",
+            display_name="Admin",
+            password="admin-pass",
+        )
+        create_sales_user(
+            session,
+            name="Alice",
+            password="alice-pass",
+            must_change_password=False,
+        )
+        create_sales_user(
+            session,
+            name="Tester",
+            password="tester-pass",
+            must_change_password=False,
+            is_test_user=True,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    app.radio(key="admin_workspace_page").set_value("销售人员")
+    app.run()
+
+    assert "Alice" in app.dataframe[0].value.to_string()
+    assert "Tester" not in app.dataframe[0].value.to_string()
+
+    app.radio(key="admin_data_view_mode").set_value("测试数据")
+    app.run()
+
+    assert "Tester" in app.dataframe[0].value.to_string()
+    assert "Alice" not in app.dataframe[0].value.to_string()
+
+
+def test_admin_test_entry_can_open_test_sales_workspace_and_create_record(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "admin-test-entry.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="admin",
+            display_name="Admin",
+            password="admin-pass",
+        )
+        create_sales_user(
+            session,
+            name="Alice",
+            password="alice-pass",
+            must_change_password=False,
+        )
+        tester = create_sales_user(
+            session,
+            name="Tester",
+            password="tester-pass",
+            must_change_password=False,
+            is_test_user=True,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    app.radio(key="admin_workspace_page").set_value("测试入口")
+    app.run()
+
+    assert "Tester" in app.selectbox(key="admin_test_entry_user").options
+    assert "Alice" not in app.selectbox(key="admin_test_entry_user").options
+
+    app.selectbox(key="admin_test_entry_user").select("Tester")
+    app.button(key="admin_open_test_entry_button").click()
+    app.run()
+
+    assert any("当前测试账号: Tester" in widget.value for widget in app.caption)
+
+    app.text_input(key="customer_name").input("Test Customer")
+    app.text_input(key="contact_name").input("Mock User")
+    app.text_input(key="phone").input("13800138000")
+    next(button for button in app.button if button.label == "保存记录").click()
+    app.run()
+
+    with session_factory() as session:
+        records = session.query(CustomerRecord).filter_by(sales_user_id=tester.id).all()
+        assert len(records) == 1
+        assert records[0].customer_name == "Test Customer"
+
+
+def test_non_core_admin_cannot_see_test_capabilities(tmp_path, monkeypatch):
+    database_path = tmp_path / "admin-non-core-test-capabilities.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+        create_sales_user(
+            session,
+            name="Tester",
+            password="tester-pass",
+            must_change_password=False,
+            is_test_user=True,
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    assert not any(widget.key == "admin_data_view_mode" for widget in app.radio)
+    assert "测试入口" not in app.radio(key="admin_workspace_page").options
+    assert "管理员" not in app.radio(key="admin_workspace_page").options
+
+    app.radio(key="admin_workspace_page").set_value("销售人员")
+    app.run()
+
+    assert not any(widget.key == "admin_new_sales_is_test_user" for widget in app.checkbox)
+    assert not any(button.key == "admin_toggle_test_sales_user_button" for button in app.button)

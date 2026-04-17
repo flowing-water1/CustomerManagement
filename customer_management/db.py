@@ -20,6 +20,9 @@ def make_engine(database_url: str, *, echo: bool = False):
         engine_kwargs["connect_args"] = {"check_same_thread": False}
         if database_url in {"sqlite://", "sqlite:///:memory:"}:
             engine_kwargs["poolclass"] = StaticPool
+    else:
+        engine_kwargs["pool_pre_ping"] = True
+        engine_kwargs["pool_recycle"] = 1800
     return create_engine(database_url, **engine_kwargs)
 
 

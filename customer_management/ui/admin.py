@@ -33,19 +33,29 @@ from customer_management.repositories.metadata import (
 )
 from customer_management.repositories.sales_users import (
     create_sales_user,
+    get_sales_user_by_id,
+    list_active_sales_users,
     list_sales_users,
     set_sales_user_active,
+    set_sales_user_test_flag,
 )
 from customer_management.services.dashboard import (
     build_dashboard_snapshot,
     list_admin_records,
 )
 from customer_management.ui.admin_customer_config import render_customer_config
+from customer_management.ui.sales import render_sales_workspace, reset_sales_workspace_state
 from customer_management.ui.shared import render_flash, set_flash
 
 ADMIN_PAGE_KEY = "admin_workspace_page"
-ADMIN_PAGES = ["概览", "记录总览", "销售人员", "管理员", "客户资料配置"]
+ADMIN_PAGES = ["概览", "记录总览", "销售人员", "测试入口", "管理员", "客户资料配置"]
 ADMIN_PASSWORD_FORM_VISIBLE_KEY = "admin_password_form_visible"
+ADMIN_DATA_VIEW_KEY = "admin_data_view_mode"
+PRODUCTION_DATA_LABEL = "生产数据"
+TEST_DATA_LABEL = "测试数据"
+ADMIN_DATA_VIEWS = [PRODUCTION_DATA_LABEL, TEST_DATA_LABEL]
+ADMIN_TEST_ENTRY_USER_KEY = "admin_test_entry_user"
+ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY = "admin_test_entry_active_user_id"
 
 
 def render_admin_area(session_factory):
@@ -88,6 +98,7 @@ def _render_login(session):
 
 
 def _render_workspace(session, admin_user):
+    is_core_admin = is_core_admin_username(getattr(admin_user, "username", ""))
     header_left, password_column, logout_column = st.columns([3, 1, 1])
     with header_left:
         st.caption(f"当前管理员: {admin_user.display_name}")
@@ -101,40 +112,91 @@ def _render_workspace(session, admin_user):
         if st.button("退出管理员登录", key="admin_logout"):
             clear_authenticated_actor(st.session_state)
             _hide_admin_password_form()
+            st.session_state.pop(ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY, None)
+            reset_sales_workspace_state(session)
             st.rerun()
 
     _render_admin_password_form(session, admin_user)
 
-    default_index = ADMIN_PAGES.index(st.session_state.get(ADMIN_PAGE_KEY, "客户资料配置"))
+    if is_core_admin:
+        selected_data_view = st.radio(
+            "数据视图",
+            ADMIN_DATA_VIEWS,
+            index=ADMIN_DATA_VIEWS.index(
+                st.session_state.get(ADMIN_DATA_VIEW_KEY, PRODUCTION_DATA_LABEL)
+            )
+            if st.session_state.get(ADMIN_DATA_VIEW_KEY, PRODUCTION_DATA_LABEL)
+            in ADMIN_DATA_VIEWS
+            else 0,
+            key=ADMIN_DATA_VIEW_KEY,
+            horizontal=True,
+        )
+        is_test_user = selected_data_view == TEST_DATA_LABEL
+        available_pages = ADMIN_PAGES
+    else:
+        is_test_user = False
+        available_pages = [
+            page for page in ADMIN_PAGES if page not in {"测试入口", "管理员"}
+        ]
+
+    default_page = st.session_state.get(ADMIN_PAGE_KEY, "客户资料配置")
+    if default_page not in available_pages:
+        default_page = "客户资料配置"
+    default_index = available_pages.index(default_page)
     selected_page = st.radio(
         "管理员工作台",
-        ADMIN_PAGES,
+        available_pages,
         index=default_index,
         key=ADMIN_PAGE_KEY,
         horizontal=True,
     )
 
     if selected_page == "概览":
-        _render_dashboard_overview(session)
+        if is_test_user:
+            _render_dashboard_overview(session, is_test_user=True)
+        else:
+            _render_dashboard_overview(session, is_test_user=False)
     elif selected_page == "记录总览":
-        _render_records_overview(session)
+        if is_test_user:
+            _render_records_overview(session, is_test_user=True)
+        else:
+            _render_records_overview(session, is_test_user=False)
     elif selected_page == "销售人员":
-        _render_sales_management(session)
+        if is_test_user:
+            _render_sales_management(
+                session,
+                is_test_user=True,
+                allow_test_management=is_core_admin,
+            )
+        else:
+            _render_sales_management(
+                session,
+                is_test_user=False,
+                allow_test_management=is_core_admin,
+            )
+    elif selected_page == "测试入口":
+        _render_test_entry(session)
     elif selected_page == "管理员":
         _render_admin_management(session, admin_user.id)
     else:
         render_customer_config(session)
 
 
-def _render_sales_management(session):
+def _render_sales_management(
+    session, *, is_test_user=None, allow_test_management: bool = True
+):
     st.markdown("#### 销售人员列表")
-    sales_users = list_sales_users(session)
+    if is_test_user is None:
+        sales_users = list_sales_users(session)
+    else:
+        sales_users = list_sales_users(session, is_test_user=is_test_user)
     if sales_users:
         frame = pd.DataFrame(
             [
                 {
                     "ID": user.id,
                     "姓名": user.name,
+                    "测试账号": user.is_test_user,
                     "启用": user.is_active,
                     "首次改密": user.must_change_password,
                 }
@@ -154,6 +216,11 @@ def _render_sales_management(session):
         must_change_password = st.checkbox(
             "首次登录必须改密", value=True, key="admin_new_sales_must_change"
         )
+        new_sales_is_test_user = False
+        if allow_test_management:
+            new_sales_is_test_user = st.checkbox(
+                "标记为测试账号", value=False, key="admin_new_sales_is_test_user"
+            )
         submitted = st.form_submit_button("创建销售人员")
         if submitted:
             if not name or not password:
@@ -164,13 +231,83 @@ def _render_sales_management(session):
                 name=name,
                 password=password,
                 must_change_password=must_change_password,
+                is_test_user=new_sales_is_test_user,
             )
             set_flash(st.session_state, f"销售人员 {name} 已创建")
             st.rerun()
 
+    if sales_users and allow_test_management:
+        selected_user = st.selectbox(
+            "选择销售人员设置测试账号",
+            sales_users,
+            format_func=lambda item: (
+                f"{item.name} ({'测试账号' if item.is_test_user else '正式账号'})"
+            ),
+            key="admin_toggle_test_sales_user",
+        )
+        test_button_label = (
+            "取消测试账号" if selected_user.is_test_user else "标记为测试账号"
+        )
+        if st.button(test_button_label, key="admin_toggle_test_sales_user_button"):
+            set_sales_user_test_flag(
+                session,
+                selected_user.id,
+                not selected_user.is_test_user,
+            )
+            set_flash(st.session_state, f"销售人员 {selected_user.name} 测试标记已更新")
+            st.rerun()
 
-def _render_dashboard_overview(session):
-    snapshot = build_dashboard_snapshot(session)
+
+def _render_test_entry(session):
+    st.markdown("#### 测试入口")
+    active_test_user_id = st.session_state.get(ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY)
+    if active_test_user_id is not None:
+        sales_user = get_sales_user_by_id(session, active_test_user_id)
+        if sales_user is None or not sales_user.is_active or not sales_user.is_test_user:
+            st.session_state.pop(ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY, None)
+            st.warning("当前测试账号不可用")
+            return
+
+        render_sales_workspace(
+            session,
+            sales_user,
+            header_text=f"当前测试账号: {sales_user.name}",
+            exit_button_label="返回测试入口",
+            on_exit=lambda: _close_test_entry(session),
+            allow_password_change=False,
+        )
+        return
+
+    test_users = list_active_sales_users(session, is_test_user=True)
+    if not test_users:
+        st.info("暂无可用测试账号")
+        return
+
+    st.caption("仅管理员可从这里进入测试账号工作台。")
+    selected_user_name = st.selectbox(
+        "选择测试账号",
+        [user.name for user in test_users],
+        key=ADMIN_TEST_ENTRY_USER_KEY,
+    )
+    if st.button("进入测试入口", key="admin_open_test_entry_button"):
+        selected_user = next(
+            user for user in test_users if user.name == selected_user_name
+        )
+        st.session_state[ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY] = selected_user.id
+        reset_sales_workspace_state(session)
+        st.rerun()
+
+
+def _close_test_entry(session):
+    st.session_state.pop(ADMIN_TEST_ENTRY_ACTIVE_USER_ID_KEY, None)
+    reset_sales_workspace_state(session)
+
+
+def _render_dashboard_overview(session, *, is_test_user=None):
+    if is_test_user is None:
+        snapshot = build_dashboard_snapshot(session)
+    else:
+        snapshot = build_dashboard_snapshot(session, is_test_user=is_test_user)
     metric_columns = st.columns(5)
     metric_columns[0].metric("总记录数", snapshot.total_records)
     metric_columns[1].metric("今日新增", snapshot.records_today)
@@ -302,9 +439,12 @@ def _clear_admin_password_form_fields():
     st.session_state.pop("admin_self_confirm_password", None)
 
 
-def _render_records_overview(session):
+def _render_records_overview(session, *, is_test_user=None):
     st.markdown("#### 全量记录")
-    sales_users = list_sales_users(session)
+    if is_test_user is None:
+        sales_users = list_sales_users(session)
+    else:
+        sales_users = list_sales_users(session, is_test_user=is_test_user)
     tag_options = list_tag_options(session)
 
     filter_columns = st.columns(3)
@@ -340,6 +480,7 @@ def _render_records_overview(session):
         tag_option_id=None if selected_option is None else selected_option.id,
         start_date=start_date,
         end_date=end_date,
+        is_test_user=is_test_user,
     )
     if not records:
         st.info("当前筛选条件下没有记录")
