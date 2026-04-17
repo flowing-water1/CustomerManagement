@@ -10,7 +10,7 @@ load_dotenv()
 
 st.set_page_config(page_title="客户信息管理", layout="wide")
 
-settings = Settings.from_env()
+settings = Settings.from_sources(secrets=st.secrets)
 session_factory = get_session_factory(settings.database_url)
 
 st.title("客户信息管理")

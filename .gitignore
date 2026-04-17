@@ -1,4 +1,9 @@
 .ace-tool/
 .worktrees/
 .env
+.streamlit/secrets.toml
+.idea/
+img.png
+img_1.png
+request_codex.md
 __pycache__/

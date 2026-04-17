@@ -102,12 +102,10 @@ from customer_management.config import Settings
 
 def test_settings_reads_required_database_values(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://streamlit:streamlit@localhost:5432/customer")
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     settings = Settings.from_env()
 
     assert settings.database_url.endswith("/customer")
-    assert settings.app_secret_key == "dev-secret"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -125,13 +123,11 @@ import os
 @dataclass(slots=True)
 class Settings:
     database_url: str
-    app_secret_key: str
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
             database_url=os.environ["DATABASE_URL"],
-            app_secret_key=os.environ["APP_SECRET_KEY"],
         )
 ```
 
@@ -145,7 +141,7 @@ Also create:
   - `python-dotenv>=1.0`
   - `pandas>=2.0`
   - `pytest>=8.0`
-- `.env.example` with placeholder `DATABASE_URL`, `APP_SECRET_KEY`
+- `.env.example` with placeholder `DATABASE_URL`
 - `.streamlit/config.toml` with a basic wide layout and development theme
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -532,7 +528,6 @@ from streamlit.testing.v1 import AppTest
 
 def test_sales_login_page_shows_name_selector(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file("app.py")
     app.run()
@@ -586,7 +581,6 @@ from streamlit.testing.v1 import AppTest
 
 def test_admin_login_page_shows_username_and_password(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file("app.py")
     app.run()
@@ -764,3 +758,4 @@ git commit -m "test: add smoke coverage and docs"
 - Keep `main.py` untouched until the new Streamlit app is working; delete it only if it becomes noise
 - Do not introduce attachments, audit logs, or password recovery while implementing this plan
 - Prefer explicit forms and repository functions over hidden Streamlit state mutations
+

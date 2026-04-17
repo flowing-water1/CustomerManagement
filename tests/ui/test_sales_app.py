@@ -14,7 +14,6 @@ from customer_management.repositories.sales_users import (
 
 def test_sales_login_page_shows_name_selector(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -39,7 +38,6 @@ def test_sales_user_can_log_in_create_record_and_see_it_in_list(tmp_path, monkey
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -83,7 +81,6 @@ def test_sales_page_renders_number_custom_field_without_state_errors(
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -124,7 +121,6 @@ def test_sales_user_can_start_new_record_from_record_actions(tmp_path, monkeypat
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -167,7 +163,6 @@ def test_sales_user_can_change_password_from_workspace(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -219,7 +214,6 @@ def test_sales_login_hides_test_users_by_default(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
 

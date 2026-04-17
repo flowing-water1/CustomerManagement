@@ -25,7 +25,18 @@ copy .env.example .env
 
 ```env
 DATABASE_URL=postgresql+psycopg://<db_user>:<db_password>@<db_host>:5432/customer
-APP_SECRET_KEY=replace-with-a-real-secret
+```
+
+## Streamlit Secrets
+
+The app now supports Streamlit secrets and reads them before environment variables.
+
+For local testing with Streamlit secrets, copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and fill in the real values.
+
+For Streamlit Community Cloud, add the same keys in the app's **Secrets** settings:
+
+```toml
+DATABASE_URL = "postgresql+psycopg://<db_user>:<db_password>@<db_host>:5432/customer"
 ```
 
 ## Initialize Database
@@ -37,7 +48,6 @@ python scripts/init_db.py
 ```
 
 This creates the tables and seeds the default tag groups/options from the confirmed business requirements.
-If the database already exists, startup also backfills the `sales_users.is_test_user` column automatically.
 
 ## Create the First Admin User
 
@@ -101,3 +111,10 @@ python -m pytest -v
 - No soft delete
 - No audit log
 - First admin must be created directly in the database
+
+## GitHub Push Checklist
+
+- confirm `.env` is not committed
+- keep `.streamlit/secrets.toml` local only
+- avoid committing local IDE files such as `.idea/`
+- avoid committing scratch files such as `img.png`, `img_1.png`, and `request_codex.md`

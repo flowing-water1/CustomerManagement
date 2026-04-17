@@ -9,7 +9,11 @@ class Base(DeclarativeBase):
 
 def normalize_database_url(database_url: str) -> str:
     if database_url.startswith("postgresql+psycopg://"):
-        return "postgresql+psycopg2://" + database_url[len("postgresql+psycopg://") :]
+        return database_url
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + database_url[len("postgresql://") :]
+    if database_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + database_url[len("postgres://") :]
     return database_url
 
 

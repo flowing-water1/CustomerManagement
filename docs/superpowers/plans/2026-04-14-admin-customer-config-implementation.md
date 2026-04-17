@@ -348,7 +348,6 @@ def _build_logged_in_admin_app(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -445,7 +444,6 @@ def test_customer_config_summary_shows_inactive_tag_and_opens_tag_quick_edit(
         set_tag_option_active(session, kunlun.id, False)
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -533,7 +531,6 @@ def test_customer_config_field_section_shows_examples_and_opens_field_quick_edit
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -641,3 +638,4 @@ git commit -m "feat: redesign admin customer configuration ux"
 - Keep the implementation DRY by reusing the existing create/toggle repository helpers in the new detailed sections.
 - Do not reintroduce `st.data_editor` as the primary metadata UX.
 - If `st.popover` proves hard to verify in `AppTest`, prefer inline containers for summary quick edit so the behavior remains deterministic and testable.
+

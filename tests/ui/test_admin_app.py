@@ -20,7 +20,6 @@ from customer_management.repositories.sales_users import create_sales_user, get_
 
 def test_admin_login_page_shows_username_and_password(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -44,7 +43,6 @@ def _build_logged_in_admin_app(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -90,7 +88,6 @@ def test_customer_config_summary_shows_inactive_tag_and_opens_tag_quick_edit(
         set_tag_option_active(session, kunlun.id, False)
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -155,7 +152,6 @@ def test_customer_config_field_section_shows_examples_and_opens_field_quick_edit
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -206,7 +202,6 @@ def test_customer_config_shows_delete_buttons_for_unused_metadata(
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -304,7 +299,6 @@ def test_customer_config_hides_delete_buttons_for_used_metadata(
         session.commit()
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -338,7 +332,6 @@ def test_admin_user_can_change_password_from_workspace(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -387,7 +380,6 @@ def test_admin_management_can_delete_other_admin_user(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -439,7 +431,6 @@ def test_core_admin_can_access_admin_management_page(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -477,7 +468,6 @@ def test_admin_can_mark_sales_user_as_test_user(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
     app.text_input(key="admin_username").input("admin")
@@ -528,7 +518,6 @@ def test_admin_sales_management_can_switch_between_production_and_test_data(
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
     app.text_input(key="admin_username").input("admin")
@@ -580,7 +569,6 @@ def test_admin_test_entry_can_open_test_sales_workspace_and_create_record(
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
@@ -636,7 +624,6 @@ def test_non_core_admin_cannot_see_test_capabilities(tmp_path, monkeypatch):
         )
 
     monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
 
     app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
     app.run()
