@@ -9,8 +9,11 @@ from customer_management.auth import (
 )
 from customer_management.repositories.admin_users import (
     authenticate_admin_user,
+    change_admin_password,
     create_admin_user,
+    delete_admin_user,
     get_admin_user_by_id,
+    is_core_admin_username,
     list_admin_users,
     set_admin_user_active,
 )
@@ -42,6 +45,7 @@ from customer_management.ui.shared import render_flash, set_flash
 
 ADMIN_PAGE_KEY = "admin_workspace_page"
 ADMIN_PAGES = ["概览", "记录总览", "销售人员", "管理员", "客户资料配置"]
+ADMIN_PASSWORD_FORM_VISIBLE_KEY = "admin_password_form_visible"
 
 
 def render_admin_area(session_factory):
@@ -84,13 +88,22 @@ def _render_login(session):
 
 
 def _render_workspace(session, admin_user):
-    header_left, header_right = st.columns([3, 1])
+    header_left, password_column, logout_column = st.columns([3, 1, 1])
     with header_left:
         st.caption(f"当前管理员: {admin_user.display_name}")
-    with header_right:
+    with password_column:
+        st.button(
+            "修改密码",
+            key="admin_open_password_form",
+            on_click=_show_admin_password_form,
+        )
+    with logout_column:
         if st.button("退出管理员登录", key="admin_logout"):
             clear_authenticated_actor(st.session_state)
+            _hide_admin_password_form()
             st.rerun()
+
+    _render_admin_password_form(session, admin_user)
 
     default_index = ADMIN_PAGES.index(st.session_state.get(ADMIN_PAGE_KEY, "客户资料配置"))
     selected_page = st.radio(
@@ -236,6 +249,59 @@ def _render_donut_chart(title: str, items, empty_message: str):
     st.altair_chart(chart, use_container_width=True)
 
 
+def _render_admin_password_form(session, admin_user):
+    if not st.session_state.get(ADMIN_PASSWORD_FORM_VISIBLE_KEY):
+        return
+
+    with st.form("admin_self_change_password_form"):
+        old_password = st.text_input("当前密码", type="password", key="admin_self_old_password")
+        new_password = st.text_input("新密码", type="password", key="admin_self_new_password")
+        confirm_password = st.text_input("确认新密码", type="password", key="admin_self_confirm_password")
+        save_column, cancel_column = st.columns(2)
+        with save_column:
+            save_clicked = st.form_submit_button("保存新密码")
+        with cancel_column:
+            cancel_clicked = st.form_submit_button("取消")
+
+        if cancel_clicked:
+            _clear_admin_password_form_fields()
+            _hide_admin_password_form()
+            st.rerun()
+
+        if save_clicked:
+            if not new_password or new_password != confirm_password:
+                st.error("新密码为空或两次输入不一致")
+                return
+            try:
+                change_admin_password(
+                    session,
+                    admin_user.id,
+                    old_password,
+                    new_password,
+                )
+            except ValueError:
+                st.error("当前密码不正确")
+                return
+            _clear_admin_password_form_fields()
+            _hide_admin_password_form()
+            set_flash(st.session_state, "密码已更新，下次登录请使用新密码")
+            st.rerun()
+
+
+def _show_admin_password_form():
+    st.session_state[ADMIN_PASSWORD_FORM_VISIBLE_KEY] = True
+
+
+def _hide_admin_password_form():
+    st.session_state[ADMIN_PASSWORD_FORM_VISIBLE_KEY] = False
+
+
+def _clear_admin_password_form_fields():
+    st.session_state.pop("admin_self_old_password", None)
+    st.session_state.pop("admin_self_new_password", None)
+    st.session_state.pop("admin_self_confirm_password", None)
+
+
 def _render_records_overview(session):
     st.markdown("#### 全量记录")
     sales_users = list_sales_users(session)
@@ -351,18 +417,35 @@ def _render_admin_management(session, current_admin_user_id: int):
             st.rerun()
 
     toggle_candidates = [user for user in admin_users if user.id != current_admin_user_id]
-    if toggle_candidates:
-        selected_user = st.selectbox(
-            "选择管理员进行启停",
-            toggle_candidates,
-            format_func=lambda item: f"{item.username} ({'启用' if item.is_active else '停用'})",
-            key="admin_toggle_admin_user",
-        )
-        button_label = "停用管理员" if selected_user.is_active else "启用管理员"
-        if st.button(button_label, key="admin_toggle_admin_user_button"):
-            set_admin_user_active(session, selected_user.id, not selected_user.is_active)
-            set_flash(st.session_state, f"管理员 {selected_user.display_name} 状态已更新")
-            st.rerun()
+    if not toggle_candidates:
+        st.session_state.pop("admin_toggle_admin_user", None)
+        return
+
+    selected_user = st.selectbox(
+        "选择管理员进行管理",
+        toggle_candidates,
+        format_func=lambda item: f"{item.username} ({'启用' if item.is_active else '停用'})",
+        key="admin_toggle_admin_user",
+    )
+    toggle_column, delete_column = st.columns(2)
+    button_label = "停用管理员" if selected_user.is_active else "启用管理员"
+    if is_core_admin_username(selected_user.username):
+        with toggle_column:
+            st.caption("核心管理员不允许停用")
+        with delete_column:
+            st.caption("核心管理员不允许删除")
+    else:
+        with toggle_column:
+            if st.button(button_label, key="admin_toggle_admin_user_button"):
+                set_admin_user_active(session, selected_user.id, not selected_user.is_active)
+                set_flash(st.session_state, f"管理员 {selected_user.display_name} 状态已更新")
+                st.rerun()
+        with delete_column:
+            if st.button("删除管理员", key="admin_delete_admin_user_button"):
+                delete_admin_user(session, selected_user.id)
+                st.session_state.pop("admin_toggle_admin_user", None)
+                set_flash(st.session_state, f"管理员 {selected_user.display_name} 已删除")
+                st.rerun()
 
 
 def _render_tag_management(session):

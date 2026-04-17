@@ -5,7 +5,11 @@ from streamlit.testing.v1 import AppTest
 from customer_management.bootstrap import create_schema, seed_default_metadata
 from customer_management.db import make_engine, make_session_factory
 from customer_management.models import RecordFieldValue, RecordTag, TagOption
-from customer_management.repositories.admin_users import create_admin_user
+from customer_management.repositories.admin_users import (
+    authenticate_admin_user,
+    create_admin_user,
+    get_admin_user_by_id,
+)
 from customer_management.repositories.metadata import (
     create_custom_field,
     create_custom_field_option,
@@ -315,3 +319,136 @@ def test_customer_config_hides_delete_buttons_for_used_metadata(
         button.key == "admin_delete_custom_field_option_button"
         for button in app.button
     )
+
+
+def test_admin_user_can_change_password_from_workspace(tmp_path, monkeypatch):
+    database_path = tmp_path / "admin-change-password.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    assert any(button.label == "修改密码" for button in app.button)
+
+    next(button for button in app.button if button.label == "修改密码").click()
+    app.run()
+
+    app.text_input(key="admin_self_old_password").input("admin-pass")
+    app.text_input(key="admin_self_new_password").input("updated-pass")
+    app.text_input(key="admin_self_confirm_password").input("updated-pass")
+    next(button for button in app.button if button.label == "保存新密码").click()
+    app.run()
+
+    assert len(app.exception) == 0
+    assert any(button.label == "退出管理员登录" for button in app.button)
+
+    with session_factory() as session:
+        assert authenticate_admin_user(session, "hr-admin", "updated-pass") is not None
+
+
+def test_admin_management_can_delete_other_admin_user(tmp_path, monkeypatch):
+    database_path = tmp_path / "admin-delete-user.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+        removable_admin = create_admin_user(
+            session,
+            username="ops-admin",
+            display_name="OPS",
+            password="ops-pass",
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    app.radio(key="admin_workspace_page").set_value("管理员")
+    app.run()
+
+    assert any(button.key == "admin_delete_admin_user_button" for button in app.button)
+
+    app.button(key="admin_delete_admin_user_button").click()
+    app.run()
+
+    assert len(app.exception) == 0
+
+    with session_factory() as session:
+        assert get_admin_user_by_id(session, removable_admin.id) is None
+        assert authenticate_admin_user(session, "ops-admin", "ops-pass") is None
+
+
+def test_admin_management_hides_delete_for_core_admin(tmp_path, monkeypatch):
+    database_path = tmp_path / "admin-protected-user.db"
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = make_engine(database_url)
+    create_schema(engine)
+    session_factory = make_session_factory(engine)
+    with session_factory() as session:
+        seed_default_metadata(session)
+        create_admin_user(
+            session,
+            username="admin",
+            display_name="Admin",
+            password="core-pass",
+        )
+        create_admin_user(
+            session,
+            username="hr-admin",
+            display_name="HR",
+            password="admin-pass",
+        )
+        create_admin_user(
+            session,
+            username="ops-admin",
+            display_name="OPS",
+            password="ops-pass",
+        )
+
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("APP_SECRET_KEY", "dev-secret")
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[2] / "app.py"))
+    app.run()
+    app.text_input(key="admin_username").input("hr-admin")
+    app.text_input(key="admin_password").input("admin-pass")
+    next(button for button in app.button if button.label == "管理员登录").click()
+    app.run()
+
+    app.radio(key="admin_workspace_page").set_value("管理员")
+    app.run()
+
+    assert not any(button.key == "admin_delete_admin_user_button" for button in app.button)
+    assert not any(button.key == "admin_toggle_admin_user_button" for button in app.button)
