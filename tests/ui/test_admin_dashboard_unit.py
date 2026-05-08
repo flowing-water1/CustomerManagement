@@ -66,3 +66,62 @@ def test_dashboard_overview_renders_titled_charts_without_cross_statistics(monke
     assert len(altair_calls) == 2
     assert len(dataframe_calls) == 1
     assert expander_calls == []
+
+
+def test_records_overview_uses_search_input_instead_of_date_filter(monkeypatch):
+    list_admin_records_calls = []
+    text_input_calls = []
+
+    monkeypatch.setattr(admin_ui, "list_sales_users", lambda *args, **kwargs: [])
+    monkeypatch.setattr(admin_ui, "list_tag_options", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        admin_ui.st,
+        "columns",
+        lambda spec: [_DummyContext() for _ in range(spec)],
+    )
+    monkeypatch.setattr(admin_ui.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        admin_ui.st,
+        "selectbox",
+        lambda label, options, **kwargs: options[0],
+    )
+
+    def fake_text_input(*args, **kwargs):
+        text_input_calls.append((args, kwargs))
+        return "ACME"
+
+    def fail_date_input(*args, **kwargs):
+        raise AssertionError("records overview should use search instead of date input")
+
+    def fake_list_admin_records(*args, **kwargs):
+        list_admin_records_calls.append((args, kwargs))
+        return [
+            {
+                "id": 1,
+                "sales_name": "Alice",
+                "customer_name": "ACME",
+                "contact_name": "Bob",
+                "phone": "13800000000",
+                "remark": "first",
+                "created_at": "2026-05-08",
+                "updated_at": "2026-05-08",
+            }
+        ]
+
+    monkeypatch.setattr(admin_ui.st, "text_input", fake_text_input)
+    monkeypatch.setattr(admin_ui.st, "date_input", fail_date_input)
+    monkeypatch.setattr(admin_ui.st, "dataframe", lambda *args, **kwargs: None)
+    monkeypatch.setattr(admin_ui, "list_admin_records", fake_list_admin_records)
+
+    admin_ui._render_records_overview(None)
+
+    assert text_input_calls == [
+        (
+            ("搜索",),
+            {
+                "placeholder": "客户名称 / 联系人 / 电话 / 备注",
+                "key": "admin_records_search_query",
+            },
+        )
+    ]
+    assert list_admin_records_calls[0][1]["query"] == "ACME"

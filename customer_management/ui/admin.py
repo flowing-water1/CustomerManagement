@@ -463,23 +463,17 @@ def _render_records_overview(session, *, is_test_user=None):
             key="admin_records_tag_filter",
         )
     with filter_columns[2]:
-        selected_dates = st.date_input(
-            "按日期筛选",
-            value=(),
-            key="admin_records_date_filter",
+        search_query = st.text_input(
+            "搜索",
+            placeholder="客户名称 / 联系人 / 电话 / 备注",
+            key="admin_records_search_query",
         )
-
-    start_date = None
-    end_date = None
-    if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
-        start_date, end_date = selected_dates
 
     records = list_admin_records(
         session,
         sales_user_id=None if selected_sales is None else selected_sales.id,
         tag_option_id=None if selected_option is None else selected_option.id,
-        start_date=start_date,
-        end_date=end_date,
+        query=search_query,
         is_test_user=is_test_user,
     )
     if not records:

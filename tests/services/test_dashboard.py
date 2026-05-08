@@ -2,7 +2,9 @@ from customer_management.bootstrap import seed_default_metadata
 from customer_management.models import TagOption
 from customer_management.repositories.records import create_record
 from customer_management.repositories.sales_users import create_sales_user
-from customer_management.services.dashboard import build_dashboard_snapshot
+import pytest
+
+from customer_management.services.dashboard import build_dashboard_snapshot, list_admin_records
 
 
 def test_build_dashboard_snapshot_returns_totals_rankings_and_distributions(
@@ -22,6 +24,23 @@ def test_build_dashboard_snapshot_returns_totals_rankings_and_distributions(
         "未成交": 1,
     }
     assert not hasattr(snapshot, "cross_statistics")
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_customer_names"),
+    [
+        ("ACME", ["ACME"]),
+        ("Ada", ["Globex"]),
+        ("13700000000", ["Initech"]),
+        ("second", ["Globex"]),
+    ],
+)
+def test_list_admin_records_filters_by_search_query(
+    db_session, dashboard_seed_data, query, expected_customer_names
+):
+    records = list_admin_records(db_session, query=query)
+
+    assert [record["customer_name"] for record in records] == expected_customer_names
 
 
 def test_build_dashboard_snapshot_can_filter_by_test_user_flag(db_session):

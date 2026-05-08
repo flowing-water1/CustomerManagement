@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from customer_management.models import (
     CustomerRecord,
@@ -153,25 +153,37 @@ def list_admin_records(
     *,
     sales_user_id: Optional[int] = None,
     tag_option_id: Optional[int] = None,
+    query: Optional[str] = None,
     start_date=None,
     end_date=None,
     is_test_user: Optional[bool] = None,
 ):
-    query = (
+    statement = (
         session.query(CustomerRecord, SalesUser.name)
         .join(SalesUser, SalesUser.id == CustomerRecord.sales_user_id)
         .filter(*_build_test_user_filters(is_test_user=is_test_user))
         .order_by(CustomerRecord.updated_at.desc())
     )
     if sales_user_id is not None:
-        query = query.filter(CustomerRecord.sales_user_id == sales_user_id)
+        statement = statement.filter(CustomerRecord.sales_user_id == sales_user_id)
     if start_date is not None:
-        query = query.filter(CustomerRecord.created_at >= start_date)
+        statement = statement.filter(CustomerRecord.created_at >= start_date)
     if end_date is not None:
-        query = query.filter(CustomerRecord.created_at <= end_date)
+        statement = statement.filter(CustomerRecord.created_at <= end_date)
     if tag_option_id is not None:
-        query = query.join(RecordTag, RecordTag.record_id == CustomerRecord.id).filter(
+        statement = statement.join(RecordTag, RecordTag.record_id == CustomerRecord.id).filter(
             RecordTag.option_id == tag_option_id
+        )
+    search_text = query.strip() if query else ""
+    if search_text:
+        like_value = f"%{search_text}%"
+        statement = statement.filter(
+            or_(
+                CustomerRecord.customer_name.like(like_value),
+                CustomerRecord.contact_name.like(like_value),
+                CustomerRecord.phone.like(like_value),
+                CustomerRecord.remark.like(like_value),
+            )
         )
     return [
         {
@@ -184,7 +196,7 @@ def list_admin_records(
             "created_at": record.created_at,
             "updated_at": record.updated_at,
         }
-        for record, sales_name in query.all()
+        for record, sales_name in statement.all()
     ]
 
 
